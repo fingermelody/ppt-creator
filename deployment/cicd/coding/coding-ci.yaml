@@ -1,0 +1,128 @@
+# ============================================
+# CODING 持续集成流水线配置
+# PPT-RSD 项目
+# ============================================
+
+stages:
+  - build
+  - test
+  - push
+  - deploy
+
+variables:
+  TCR_REGISTRY: ppt-creator-registry.tencentcloudcr.com
+  TCR_NAMESPACE: ppt-creator
+  TKE_CLUSTER_ID: your-tke-cluster-id
+  TKE_NAMESPACE: ppt-creator-prod
+
+# ============================================
+# 构建阶段
+# ============================================
+
+build-frontend:
+  stage: build
+  image: node:18-alpine
+  script:
+    - cd frontend
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - frontend/dist/
+    expire_in: 1 hour
+
+test-backend:
+  stage: test
+  image: python:3.11
+  services:
+    - postgres:15
+    - redis:7
+  variables:
+    POSTGRES_DB: test_ppt_rsd
+    POSTGRES_USER: test
+    POSTGRES_PASSWORD: test
+    DATABASE_URL: postgresql://test:test@postgres:5432/test_ppt_rsd
+    REDIS_URL: redis://redis:6379/0
+  script:
+    - cd backend
+    - pip install -r requirements-dev.txt
+    - pytest tests/ -v --cov=app --cov-report=xml
+  coverage: '/TOTAL.+ ([0-9]{1,3}%)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: backend/coverage.xml
+
+# ============================================
+# 镜像构建与推送
+# ============================================
+
+build-and-push-images:
+  stage: push
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - echo "$TCR_PASSWORD" | docker login $TCR_REGISTRY -u $TCR_USERNAME --password-stdin
+  script:
+    # 构建前端镜像
+    - docker build 
+        -t $TCR_REGISTRY/$TCR_NAMESPACE/frontend:$CI_COMMIT_SHA 
+        -t $TCR_REGISTRY/$TCR_NAMESPACE/frontend:latest
+        -f deployment/docker/Dockerfile.frontend .
+    - docker push $TCR_REGISTRY/$TCR_NAMESPACE/frontend:$CI_COMMIT_SHA
+    - docker push $TCR_REGISTRY/$TCR_NAMESPACE/frontend:latest
+    
+    # 构建后端镜像
+    - docker build 
+        -t $TCR_REGISTRY/$TCR_NAMESPACE/backend:$CI_COMMIT_SHA 
+        -t $TCR_REGISTRY/$TCR_NAMESPACE/backend:latest
+        -f deployment/docker/Dockerfile.backend .
+    - docker push $TCR_REGISTRY/$TCR_NAMESPACE/backend:$CI_COMMIT_SHA
+    - docker push $TCR_REGISTRY/$TCR_NAMESPACE/backend:latest
+    
+    # 构建Worker镜像
+    - docker build 
+        -t $TCR_REGISTRY/$TCR_NAMESPACE/worker:$CI_COMMIT_SHA 
+        -t $TCR_REGISTRY/$TCR_NAMESPACE/worker:latest
+        -f deployment/docker/Dockerfile.worker .
+    - docker push $TCR_REGISTRY/$TCR_NAMESPACE/worker:$CI_COMMIT_SHA
+    - docker push $TCR_REGISTRY/$TCR_NAMESPACE/worker:latest
+
+# ============================================
+# 部署阶段
+# ============================================
+
+deploy-to-tke:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  environment:
+    name: production
+    url: https://ppt-rsd.example.com
+  only:
+    - main
+  script:
+    # 配置 TKE 访问凭证
+    - tccli configure set secretId $TENCENT_SECRET_ID secretKey $TENCENT_SECRET_KEY region ap-guangzhou
+    - tccli tke DescribeClusterKubeconfig --ClusterId $TKE_CLUSTER_ID > kubeconfig.yaml
+    - export KUBECONFIG=kubeconfig.yaml
+    
+    # 更新镜像
+    - kubectl set image deployment/frontend 
+        frontend=$TCR_REGISTRY/$TCR_NAMESPACE/frontend:$CI_COMMIT_SHA 
+        -n $TKE_NAMESPACE
+    - kubectl set image deployment/backend 
+        backend=$TCR_REGISTRY/$TCR_NAMESPACE/backend:$CI_COMMIT_SHA 
+        -n $TKE_NAMESPACE
+    - kubectl set image deployment/worker 
+        worker=$TCR_REGISTRY/$TCR_NAMESPACE/worker:$CI_COMMIT_SHA 
+        -n $TKE_NAMESPACE
+    
+    # 等待部署完成
+    - kubectl rollout status deployment/frontend -n $TKE_NAMESPACE --timeout=300s
+    - kubectl rollout status deployment/backend -n $TKE_NAMESPACE --timeout=300s
+    - kubectl rollout status deployment/worker -n $TKE_NAMESPACE --timeout=300s
+    
+    # 验证部署
+    - kubectl get pods -n $TKE_NAMESPACE
