@@ -1,0 +1,105 @@
+.assembly-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.assembly-page.loading,
+.assembly-page.empty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+.assembly-header {
+  height: 64px;
+  padding: 0 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e7e7e7;
+  background: #fff;
+}
+
+.header-left,
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.chapters-sidebar {
+  width: 320px;
+  background: #fff;
+  border-right: 1px solid #e7e7e7;
+  display: flex;
+  flex-direction: column;
+}
+
+.chapters-header {
+  height: 56px;
+  padding: 0 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e7e7e7;
+}
+
+.chapters-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.chapters-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.assembly-content {
+  flex: 1;
+  background: #f5f5f5;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.chapter-detail h2 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+}
+
+.chapter-desc {
+  margin: 0 0 24px 0;
+  color: #666;
+  line-height: 1.6;
+}
+
+.slides-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.assembly-placeholder {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+.add-chapter-form .form-item {
+  margin-bottom: 20px;
+}
+
+.add-chapter-form .form-item label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}

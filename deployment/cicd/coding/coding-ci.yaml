@@ -35,13 +35,14 @@ test-backend:
   stage: test
   image: python:3.11
   services:
-    - postgres:15
+    - mysql:8
     - redis:7
   variables:
-    POSTGRES_DB: test_ppt_rsd
-    POSTGRES_USER: test
-    POSTGRES_PASSWORD: test
-    DATABASE_URL: postgresql://test:test@postgres:5432/test_ppt_rsd
+    MYSQL_DATABASE: test_ppt_rsd
+    MYSQL_USER: test
+    MYSQL_PASSWORD: test
+    MYSQL_ROOT_PASSWORD: test
+    DATABASE_URL: mysql+pymysql://test:test@mysql:3306/test_ppt_rsd
     REDIS_URL: redis://redis:6379/0
   script:
     - cd backend

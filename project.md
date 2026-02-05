@@ -7,7 +7,7 @@
 **技术栈**：
 - 前端：React 18 + TypeScript + TDesign + Zustand + React Query
 - 后端：Python 3.9+ + FastAPI + SQLAlchemy + Celery
-- 数据库：TDSQL-C PostgreSQL + Redis + ChromaDB
+- 数据库：TDSQL-C MySQL + Redis + ChromaDB
 - 部署：腾讯云TKE容器服务 / 轻量服务器 + Docker Compose
 - 流水线：腾讯云CODING DevOps / GitHub Actions + TCR
 - LLM：可选，支持混元/文心一言/通义千问/OpenAI/自定义模型
@@ -470,7 +470,7 @@ Frontend                    Backend                     VectorDB
 | 文件存储 | 本地文件系统 | 腾讯云COS |
 | LLM服务 | 可选/多模型支持 | 混元/文心/通义/OpenAI/自定义 |
 | 缓存 | Redis | 腾讯云Redis |
-| 数据库 | TDSQL-C PostgreSQL | 腾讯云TDSQL |
+| 数据库 | TDSQL-C MySQL | 腾讯云TDSQL |
 | 服务器 | 腾讯云TKE / 轻量服务器 | 腾讯云CVM |
 
 ---
@@ -518,7 +518,7 @@ Frontend                    Backend                     VectorDB
 |------|---------|------|
 | TKE集群 | 标准集群 2-4节点 | 托管Master |
 | 工作节点 | 4核8G × 2 | 运行应用容器 |
-| TDSQL-C PostgreSQL | 2核4G 100G存储 | 关系数据库 |
+| TDSQL-C MySQL | 2核4G 100G存储 | 关系数据库 |
 | 腾讯云Redis | 1G内存 | 缓存/任务队列 |
 | 腾讯云COS | 标准存储 | 文件/缩略图存储 |
 | 腾讯云TCR | 标准版 | 容器镜像仓库 |
@@ -529,7 +529,7 @@ Frontend                    Backend                     VectorDB
 | 组件 | 推荐配置 | 说明 |
 |------|---------|------|
 | 轻量服务器 | 4核8G 12M带宽 | 应用主服务器 |
-| TDSQL-C PostgreSQL | 2核4G 100G存储 | 关系数据库 |
+| TDSQL-C MySQL | 2核4G 100G存储 | 关系数据库 |
 | 腾讯云Redis | 1G内存 | 缓存/任务队列 |
 | 腾讯云COS | 标准存储 | 文件/缩略图存储 |
 
@@ -582,8 +582,8 @@ docker-compose -f docker-compose.prod.yml up -d
 
 ```bash
 # .env.production
-# 数据库 - TDSQL-C
-DATABASE_URL=postgresql://user:pass@<tdsql-endpoint>:5432/ppt_rsd
+# 数据库 - TDSQL-C MySQL
+DATABASE_URL=mysql+pymysql://user:pass@<tdsql-endpoint>:3306/ppt_rsd
 
 # Redis - 腾讯云Redis
 REDIS_URL=redis://:<password>@<redis-endpoint>:6379/0
