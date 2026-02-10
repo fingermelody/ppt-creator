@@ -50,12 +50,18 @@ export const mockApi = {
     getPageThumbnail: refinementHandlers.getPageThumbnail,
     sendMessage: refinementHandlers.sendMessage,
     getChatHistory: refinementHandlers.getChatHistory,
-    editText: () => Promise.resolve({ success: true, modification_id: 'mock-id', updated_element: {} }),
-    editTable: () => Promise.resolve({ success: true, modification_id: 'mock-id', updated_element: {} }),
-    replaceImage: () => Promise.resolve({ success: true, modification_id: 'mock-id', updated_element: {} }),
-    editStyle: () => Promise.resolve({ success: true, modification_id: 'mock-id', updated_element: {} }),
-    getSuggestions: () => Promise.resolve({ suggestions: [] }),
-    getQuickActions: () => Promise.resolve({ actions: [] }),
+    editText: (_taskId: string, _pageIndex: number, _elementId: string, _text: string, _preserveStyle?: boolean) =>
+      Promise.resolve({ success: true, modification_id: 'mock-id', updated_element: {} }),
+    editTable: (_taskId: string, _pageIndex: number, _elementId: string, _operation: string, _data: any) =>
+      Promise.resolve({ success: true, modification_id: 'mock-id', updated_element: {} }),
+    replaceImage: (_taskId: string, _pageIndex: number, _elementId: string, _imageUrl?: string, _imageBase64?: string) =>
+      Promise.resolve({ success: true, modification_id: 'mock-id', updated_element: {} }),
+    editStyle: (_taskId: string, _pageIndex: number, _elementId: string, _style: any) =>
+      Promise.resolve({ success: true, modification_id: 'mock-id', updated_element: {} }),
+    getSuggestions: (_taskId: string, _pageIndex: number) =>
+      Promise.resolve({ suggestions: [] }),
+    getQuickActions: (_taskId: string, _pageIndex: number, _selectedElement?: string) =>
+      Promise.resolve({ actions: [] }),
   },
 
   // 导出 API

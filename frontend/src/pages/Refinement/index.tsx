@@ -4,7 +4,7 @@ import {
   Button,
   Layout,
   Space,
-  Dialog,
+  DialogPlugin,
   Loading,
   Empty,
   MessagePlugin,
@@ -67,7 +67,7 @@ export default function Refinement() {
   const handleExport = async () => {
     if (!taskId) return;
 
-    const dialog = Dialog.confirm({
+    const dialog = DialogPlugin.confirm({
       header: '确认导出',
       body: '确定要导出精修后的PPT吗？',
       onConfirm: async () => {
@@ -84,8 +84,8 @@ export default function Refinement() {
     });
   };
 
-  const handleBackToDrafts = () => {
-    navigate('/drafts');
+  const handleBackToList = () => {
+    navigate('/refinement');
   };
 
   if (loading) {
@@ -100,8 +100,8 @@ export default function Refinement() {
     return (
       <div className="refinement-page empty">
         <Empty description="精修任务不存在" />
-        <Button theme="primary" onClick={handleBackToDrafts}>
-          返回草稿管理
+        <Button theme="primary" onClick={handleBackToList}>
+          返回精修列表
         </Button>
       </div>
     );
@@ -112,7 +112,7 @@ export default function Refinement() {
       <Layout>
         <Header className="refinement-header">
           <div className="header-left">
-            <Button variant="text" icon={<ChevronLeftIcon />} onClick={handleBackToDrafts}>
+            <Button variant="text" icon={<ChevronLeftIcon />} onClick={handleBackToList}>
               返回
             </Button>
             <h2 className="task-title">{task.title}</h2>
@@ -147,8 +147,6 @@ export default function Refinement() {
           <Content className="refinement-content">
             {currentPageIndex !== null && pages[currentPageIndex] ? (
               <ChatPanel
-                task={task}
-                page={pages[currentPageIndex]}
                 messages={currentMessages}
                 onSendMessage={async (message) => {
                   try {

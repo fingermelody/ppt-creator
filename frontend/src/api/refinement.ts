@@ -1,11 +1,8 @@
 import apiClient from './client';
 import {
-  RefinementTask,
   TaskDetail,
   RefinedPage,
-  SlideContent,
   RefinementMessage,
-  CommandResult,
   RefinementSuggestion,
   QuickAction,
 } from '../types/refinement';

@@ -1,6 +1,7 @@
 /* 组装 API - Mock 版本 */
 
 import { mockApi, useMock } from '../mocks/api';
+import type { PPTOutline } from '../types/outline';
 
 const assemblyApi = {
   createDraft: async (title: string, description?: string) => {
@@ -9,6 +10,54 @@ const assemblyApi = {
     }
     const { default: assemblyApiReal } = await import('./assembly');
     return assemblyApiReal.createDraft(title, description);
+  },
+
+  // 基于大纲创建草稿
+  createDraftFromOutline: async (outline: PPTOutline) => {
+    if (useMock()) {
+      // Mock 实现：基于大纲结构创建草稿
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      
+      const draftId = `draft-${Date.now()}`;
+      const chapters = outline.chapters.map((ch, index) => ({
+        id: `ch-${index + 1}`,
+        title: ch.title,
+        description: ch.summary,
+        required_pages: ch.page_count,
+        page_count: ch.page_count,
+        pages: Array.from({ length: ch.page_count }, (_, i) => ({
+          slide_id: `slide-${ch.id}-${i + 1}`,
+          document_id: `doc-${i + 1}`,
+          document_title: `示例文档 ${i + 1}`,
+          page_number: i + 1,
+          thumbnail: `https://picsum.photos/seed/${ch.id}-${i}/400/225`,
+          similarity: 0.85 + Math.random() * 0.1,
+          content_summary: `${ch.title} - 第${i + 1}页内容摘要`,
+          order: i,
+        })),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+
+      return {
+        draft_id: draftId,
+        message: '草稿创建成功',
+        draft: {
+          id: draftId,
+          title: outline.title,
+          description: outline.objective,
+          chapters,
+          total_pages: outline.total_pages,
+          status: 'draft' as const,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          version: 1,
+          outline_id: outline.id,
+        },
+      };
+    }
+    const { default: assemblyApiReal } = await import('./assembly');
+    return assemblyApiReal.createDraftFromOutline(outline);
   },
 
   getDrafts: async (page = 1, limit = 20, status?: string) => {

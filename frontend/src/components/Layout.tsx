@@ -1,6 +1,6 @@
 import { Layout as TLayout, Menu } from 'tdesign-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { FolderIcon, EditIcon, FileCopyIcon } from 'tdesign-icons-react';
+import { FolderIcon, EditIcon, FileCopyIcon, ViewListIcon, PreciseMonitorIcon } from 'tdesign-icons-react';
 import type { MenuValue } from 'tdesign-react';
 import './Layout.css';
 
@@ -13,12 +13,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const menuItems = [
     { value: '/library', label: '文档库', icon: <FolderIcon /> },
+    { value: '/outline', label: '大纲设计', icon: <ViewListIcon /> },
     { value: '/assembly', label: 'PPT组装', icon: <EditIcon /> },
+    { value: '/refinement', label: 'PPT精修', icon: <PreciseMonitorIcon /> },
     { value: '/drafts', label: '草稿管理', icon: <FileCopyIcon /> },
   ];
 
   const handleMenuChange = (value: MenuValue) => {
     navigate(String(value));
+  };
+
+  // 根据当前路径确定激活的菜单项
+  const getActiveMenu = () => {
+    const path = location.pathname;
+    if (path.startsWith('/assembly')) return '/assembly';
+    if (path.startsWith('/outline')) return '/outline';
+    if (path.startsWith('/refinement')) return '/refinement';
+    return path;
   };
 
   return (
@@ -31,7 +42,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <TLayout>
         <Aside className="layout-sider">
           <Menu
-            value={location.pathname.startsWith('/assembly') ? '/assembly' : location.pathname}
+            value={getActiveMenu()}
             onChange={handleMenuChange}
             theme="light"
           >

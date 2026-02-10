@@ -1,19 +1,17 @@
 import { useState } from 'react';
 import { Layout, Textarea, Button, Space, Avatar, Empty } from 'tdesign-react';
 import { UserIcon, ServiceIcon, ClearIcon, EnterIcon } from 'tdesign-icons-react';
-import { RefinementTask, RefinedPage, RefinementMessage } from '../../../types/refinement';
+import { RefinementMessage } from '../../../types/refinement';
 import './ChatPanel.css';
 
 const { Content } = Layout;
 
 interface ChatPanelProps {
-  task: RefinementTask;
-  page: RefinedPage;
   messages: RefinementMessage[];
   onSendMessage: (message: string) => void;
 }
 
-export default function ChatPanel({ task, page, messages, onSendMessage }: ChatPanelProps) {
+export default function ChatPanel({ messages, onSendMessage }: ChatPanelProps) {
   const [inputMessage, setInputMessage] = useState('');
 
   const handleSend = () => {
@@ -22,9 +20,9 @@ export default function ChatPanel({ task, page, messages, onSendMessage }: ChatP
     setInputMessage('');
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+  const handleKeyDown = (_value: string, context: { e: React.KeyboardEvent<HTMLTextAreaElement> }) => {
+    if (context.e.key === 'Enter' && !context.e.shiftKey) {
+      context.e.preventDefault();
       handleSend();
     }
   };

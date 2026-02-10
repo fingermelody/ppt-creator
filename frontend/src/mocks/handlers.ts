@@ -347,6 +347,33 @@ export const assemblyHandlers = {
     return { success: true };
   },
 
+  // 添加页面
+  addPage: async (draftId: string, chapterId: string, slideId: string, order: number) => {
+    await delay(200);
+    const draft = mockDrafts.find((d) => d.id === draftId);
+    if (!draft) throw new Error('Draft not found');
+
+    const chapter = draft.chapters.find((c) => c.id === chapterId);
+    if (!chapter) throw new Error('Chapter not found');
+
+    const newPage = {
+      slide_id: slideId,
+      document_id: mockDocuments[0]?.id || 'doc-001',
+      document_title: mockDocuments[0]?.title || '文档',
+      page_number: 1,
+      thumbnail: `https://via.placeholder.com/280x200?text=New-Page`,
+      similarity: 85,
+      content_summary: '新添加的页面',
+      order,
+    };
+
+    chapter.pages.splice(order, 0, newPage);
+    chapter.page_count++;
+    draft.total_pages++;
+
+    return { success: true, page: newPage };
+  },
+
   // 撤销
   undo: async (id: string) => {
     await delay(200);

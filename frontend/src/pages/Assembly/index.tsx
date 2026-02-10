@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Button,
   Card,
   Layout,
   Input,
+  Textarea,
   Slider,
   Dialog,
   Space,
@@ -12,19 +13,21 @@ import {
   Empty,
   MessagePlugin,
 } from 'tdesign-react';
-import { AddIcon, RollbackIcon, RollfrontIcon, DownloadIcon } from 'tdesign-icons-react';
+import { AddIcon, RollbackIcon, RollfrontIcon, DownloadIcon, ViewListIcon } from 'tdesign-icons-react';
 import assemblyApi from '../../api/assembly.mock';
+import outlineApi from '../../api/outline.mock';
 import { AssemblyDraft } from '../../types/assembly';
+import { PPTOutline } from '../../types/outline';
 import { useAssemblyStore } from '../../stores/assemblyStore';
 import ChapterPanel from './components/ChapterPanel';
 import SlidePreview from './components/SlidePreview';
 import './index.css';
 
 const { Header, Content, Aside } = Layout;
-const { Textarea } = Input;
 
 export default function Assembly() {
   const { draftId } = useParams<{ draftId: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { draft, setDraft, loading, setLoading, canUndo, canRedo, undoDescription, redoDescription } =
     useAssemblyStore();
@@ -34,12 +37,27 @@ export default function Assembly() {
   const [newChapterPages, setNewChapterPages] = useState(5);
   const [showAddChapter, setShowAddChapter] = useState(false);
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
+  
+  // 大纲相关状态
+  const [linkedOutline, setLinkedOutline] = useState<PPTOutline | null>(null);
+  const [showOutlineRequired, setShowOutlineRequired] = useState(false);
 
   useEffect(() => {
+    const outlineId = searchParams.get('outline');
+    
     if (draftId) {
       loadDraft(draftId);
+      if (outlineId) {
+        loadOutline(outlineId);
+      }
+    } else if (outlineId) {
+      // 从大纲页面跳转过来，需要基于大纲创建草稿
+      initializeFromOutline(outlineId);
+    } else {
+      // 没有草稿也没有大纲，显示提示
+      setShowOutlineRequired(true);
     }
-  }, [draftId]);
+  }, [draftId, searchParams]);
 
   const loadDraft = async (id: string) => {
     setLoading(true);
@@ -49,6 +67,34 @@ export default function Assembly() {
     } catch (error) {
       console.error('Failed to load draft:', error);
       MessagePlugin.error('加载草稿失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadOutline = async (outlineId: string) => {
+    try {
+      const outline = await outlineApi.getOutlineDetail(outlineId);
+      setLinkedOutline(outline);
+    } catch (error) {
+      console.error('Failed to load outline:', error);
+    }
+  };
+
+  const initializeFromOutline = async (outlineId: string) => {
+    setLoading(true);
+    try {
+      // 获取大纲详情
+      const outline = await outlineApi.getOutlineDetail(outlineId);
+      setLinkedOutline(outline);
+      
+      // 基于大纲创建草稿
+      const response = await assemblyApi.createDraftFromOutline(outline);
+      navigate(`/assembly/${response.draft_id}?outline=${outlineId}`, { replace: true });
+    } catch (error) {
+      console.error('Failed to initialize from outline:', error);
+      MessagePlugin.error('初始化失败');
+      setShowOutlineRequired(true);
     } finally {
       setLoading(false);
     }
@@ -65,6 +111,10 @@ export default function Assembly() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoToOutline = () => {
+    navigate('/outline');
   };
 
   const handleAddChapter = async () => {
@@ -143,13 +193,53 @@ export default function Assembly() {
     );
   }
 
+  // 显示需要先创建大纲的提示
+  if (showOutlineRequired && !draft) {
+    return (
+      <div className="assembly-page empty">
+        <Card className="outline-required-card">
+          <div className="outline-required-content">
+            <ViewListIcon className="outline-required-icon" />
+            <h2>开始制作PPT</h2>
+            <p className="outline-required-desc">
+              建议先设计PPT大纲，明确章节结构和内容要点，
+              <br />
+              系统会基于大纲自动匹配素材页面。
+            </p>
+            <Space direction="vertical" size="large">
+              <Button 
+                theme="primary" 
+                size="large"
+                icon={<ViewListIcon />}
+                onClick={handleGoToOutline}
+              >
+                设计PPT大纲
+              </Button>
+              <Button 
+                variant="text"
+                onClick={createNewDraft}
+              >
+                跳过，直接创建空白PPT
+              </Button>
+            </Space>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   if (!draft) {
     return (
       <div className="assembly-page empty">
         <Empty description="还没有PPT草稿" />
-        <Button theme="primary" icon={<AddIcon />} onClick={createNewDraft}>
-          创建新PPT
-        </Button>
+        <Space direction="vertical" size="large">
+          <Button theme="primary" icon={<ViewListIcon />} onClick={handleGoToOutline}>
+            从大纲开始
+          </Button>
+          <Button variant="outline" icon={<AddIcon />} onClick={createNewDraft}>
+            创建空白PPT
+          </Button>
+        </Space>
       </div>
     );
   }
@@ -166,6 +256,11 @@ export default function Assembly() {
               size="large"
               style={{ width: 300 }}
             />
+            {linkedOutline && (
+              <span className="linked-outline-badge">
+                基于大纲：{linkedOutline.title}
+              </span>
+            )}
           </div>
           <div className="header-right">
             <Space>
