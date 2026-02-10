@@ -3,6 +3,7 @@
 import { documentHandlers } from './handlers';
 import { assemblyHandlers } from './handlers';
 import { refinementHandlers } from './handlers';
+import { generationHandlers } from './handlers';
 
 export const mockApi = {
   // 文档 API
@@ -62,6 +63,20 @@ export const mockApi = {
       Promise.resolve({ suggestions: [] }),
     getQuickActions: (_taskId: string, _pageIndex: number, _selectedElement?: string) =>
       Promise.resolve({ actions: [] }),
+  },
+
+  // PPT 生成 API
+  generation: {
+    getTemplates: generationHandlers.getTemplates,
+    getTasks: generationHandlers.getTasks,
+    getTaskDetail: generationHandlers.getTaskDetail,
+    startGeneration: generationHandlers.startGeneration,
+    getProgress: generationHandlers.getProgress,
+    cancelGeneration: generationHandlers.cancelGeneration,
+    exportPPT: generationHandlers.exportPPT,
+    deleteTask: generationHandlers.deleteTask,
+    regeneratePage: generationHandlers.regeneratePage,
+    uploadCustomTemplate: generationHandlers.uploadCustomTemplate,
   },
 
   // 导出 API

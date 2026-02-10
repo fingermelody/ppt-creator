@@ -1,0 +1,151 @@
+/* 进度弹窗样式 */
+
+.progress-modal-content {
+  padding: 16px 0;
+}
+
+/* 进度条 */
+.progress-section {
+  margin-bottom: 24px;
+}
+
+/* 状态消息 */
+.status-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  font-size: 14px;
+  color: #333;
+}
+
+.status-message.error {
+  background: #fff1f0;
+  color: #e34d59;
+}
+
+.status-message .spinning {
+  animation: spin 1s linear infinite;
+  color: #0052d9;
+}
+
+.status-message .success {
+  color: #00a870;
+  font-size: 18px;
+}
+
+.status-message .error {
+  color: #e34d59;
+  font-size: 18px;
+}
+
+/* 步骤指示器 */
+.steps-indicator {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 0 20px;
+  margin-bottom: 32px;
+}
+
+.step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  flex: 1;
+}
+
+.step-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  margin-bottom: 8px;
+  transition: all 0.3s ease;
+}
+
+/* 等待状态 */
+.step-item.pending .step-icon {
+  background: #f5f5f5;
+  color: #999;
+  border: 2px solid #e7e7e7;
+}
+
+.step-item.pending .step-label {
+  color: #999;
+}
+
+/* 活动状态 */
+.step-item.active .step-icon {
+  background: #e6f4ff;
+  color: #0052d9;
+  border: 2px solid #0052d9;
+}
+
+.step-item.active .step-label {
+  color: #0052d9;
+  font-weight: 500;
+}
+
+/* 完成状态 */
+.step-item.completed .step-icon {
+  background: #0052d9;
+  color: #fff;
+  border: 2px solid #0052d9;
+}
+
+.step-item.completed .step-label {
+  color: #333;
+}
+
+.step-label {
+  font-size: 12px;
+  text-align: center;
+}
+
+/* 连接线 */
+.step-connector {
+  position: absolute;
+  top: 20px;
+  left: calc(50% + 24px);
+  width: calc(100% - 48px);
+  height: 2px;
+  background: #e7e7e7;
+}
+
+.step-item.completed .step-connector {
+  background: #0052d9;
+}
+
+.step-item.active .step-connector {
+  background: linear-gradient(to right, #0052d9 0%, #e7e7e7 100%);
+}
+
+/* 操作按钮 */
+.modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+/* 动画 */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}

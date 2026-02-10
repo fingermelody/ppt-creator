@@ -1,6 +1,6 @@
 import { Layout as TLayout, Menu } from 'tdesign-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { FolderIcon, EditIcon, FileCopyIcon, ViewListIcon, PreciseMonitorIcon } from 'tdesign-icons-react';
+import { FolderIcon, EditIcon, FileCopyIcon, ViewListIcon, PreciseMonitorIcon, InternetIcon } from 'tdesign-icons-react';
 import type { MenuValue } from 'tdesign-react';
 import './Layout.css';
 
@@ -12,6 +12,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   const menuItems = [
+    { value: '/generation', label: 'PPT生成', icon: <InternetIcon /> },
     { value: '/library', label: '文档库', icon: <FolderIcon /> },
     { value: '/outline', label: '大纲设计', icon: <ViewListIcon /> },
     { value: '/assembly', label: 'PPT组装', icon: <EditIcon /> },
@@ -26,6 +27,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // 根据当前路径确定激活的菜单项
   const getActiveMenu = () => {
     const path = location.pathname;
+    if (path.startsWith('/generation')) return '/generation';
     if (path.startsWith('/assembly')) return '/assembly';
     if (path.startsWith('/outline')) return '/outline';
     if (path.startsWith('/refinement')) return '/refinement';
