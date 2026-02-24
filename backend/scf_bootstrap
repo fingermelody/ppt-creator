@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# ============================================
+# SCF Web 函数启动脚本
+# 用于启动 FastAPI 应用
+# ============================================
+
+# 安装依赖（首次冷启动时）
+if [ ! -d "/tmp/pip_packages" ]; then
+    pip install -r requirements.txt -t /tmp/pip_packages --quiet
+fi
+
+# 添加依赖路径
+export PYTHONPATH="/tmp/pip_packages:$PYTHONPATH"
+
+# 启动 FastAPI 应用
+# SCF Web 函数要求监听 9000 端口
+exec uvicorn app.main:app --host 0.0.0.0 --port 9000 --workers 1

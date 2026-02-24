@@ -77,5 +77,5 @@ class Slide(BaseModel):
     # 向量ID（存储在 ChromaDB 中）
     vector_id = Column(String(100), nullable=True, index=True)
     
-    # 元数据
-    metadata = Column(JSON, nullable=True)
+    # 附加数据
+    extra_data = Column(JSON, nullable=True)

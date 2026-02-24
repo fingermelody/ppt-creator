@@ -50,9 +50,7 @@ services:
   # 后端测试服务
   # ============================================
   backend-test:
-    build:
-      context: ../..
-      dockerfile: deployment/docker/Dockerfile.backend
+    image: ccr.ccs.tencentyun.com/codebuddy-ppt-creator/backend:latest
     container_name: ppt-rsd-backend-test
     environment:
       - APP_ENV=test
@@ -85,9 +83,7 @@ services:
   # 前端测试服务
   # ============================================
   frontend-test:
-    build:
-      context: ../..
-      dockerfile: deployment/docker/Dockerfile.frontend
+    image: ccr.ccs.tencentyun.com/codebuddy-ppt-creator/frontend:latest
     container_name: ppt-rsd-frontend-test
     ports:
       - "3001:80"
