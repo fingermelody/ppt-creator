@@ -10,8 +10,9 @@ stages:
   - deploy
 
 variables:
-  TCR_REGISTRY: ppt-creator-registry.tencentcloudcr.com
-  TCR_NAMESPACE: ppt-creator
+  # 腾讯云个人版镜像仓库（免费）
+  TCR_REGISTRY: ccr.ccs.tencentyun.com
+  TCR_NAMESPACE: codebuddy-ppt-creator
   TKE_CLUSTER_ID: your-tke-cluster-id
   TKE_NAMESPACE: ppt-creator-prod
 

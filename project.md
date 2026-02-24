@@ -7,10 +7,10 @@
 **技术栈**：
 - 前端：React 18 + TypeScript + TDesign + Zustand + React Query
 - 后端：Python 3.9+ + FastAPI + SQLAlchemy + Celery
-- 数据库：TDSQL-C MySQL + Redis + ChromaDB
-- 部署：腾讯云TKE容器服务 / 轻量服务器 + Docker Compose
-- 流水线：腾讯云CODING DevOps / GitHub Actions + TCR
-- LLM：可选，支持混元/文心一言/通义千问/OpenAI/自定义模型
+- 数据库：SQLite（开发）/ MySQL（生产）+ Redis + ChromaDB
+- 部署：轻量服务器 + Docker Compose（推荐）/ 腾讯云TKE容器服务
+- 流水线：GitHub Actions（免费）/ 腾讯云CODING DevOps
+- LLM：可选，优先使用免费额度（混元-lite/文心-lite/通义-free）
 
 ---
 
@@ -90,6 +90,12 @@ frontend/
 │   │   │   ├── index.tsx
 │   │   │   ├── components/
 │   │   │   └── hooks/
+│   │   ├── Generation/       # PPT智能生成页面
+│   │   │   ├── index.tsx
+│   │   │   ├── index.css
+│   │   │   └── components/
+│   │   │       ├── ProgressModal.tsx    # 生成进度弹窗
+│   │   │       └── TemplateCard.tsx     # 模板卡片组件
 │   │   └── Drafts/           # 草稿管理页面
 │   │       ├── index.tsx
 │   │       └── components/
@@ -105,6 +111,7 @@ frontend/
 │   │   ├── outlineStore.ts   # 大纲设计状态
 │   │   ├── assemblyStore.ts
 │   │   ├── refinementStore.ts
+│   │   ├── generationStore.ts # PPT智能生成状态
 │   │   └── uiStore.ts
 │   │
 │   ├── types/                # TypeScript类型定义
@@ -112,6 +119,7 @@ frontend/
 │   │   ├── outline.ts        # 大纲相关类型
 │   │   ├── assembly.ts
 │   │   ├── refinement.ts
+│   │   ├── generation.ts     # PPT智能生成类型
 │   │   └── common.ts
 │   │
 │   ├── utils/                # 工具函数
@@ -155,6 +163,7 @@ backend/
 │   │   │   │   ├── outline.py      # 大纲设计接口
 │   │   │   │   ├── assembly.py     # PPT组装接口
 │   │   │   │   ├── refinement.py   # PPT精修接口
+│   │   │   │   ├── generation.py   # PPT智能生成接口
 │   │   │   │   ├── export.py       # 导出接口
 │   │   │   │   └── health.py       # 健康检查
 │   │   │   └── websockets/
@@ -174,6 +183,7 @@ backend/
 │   │   ├── outline.py        # 大纲模型
 │   │   ├── assembly.py       # 组装草稿模型
 │   │   ├── refinement.py     # 精修任务模型
+│   │   ├── generation.py     # 智能生成任务模型
 │   │   └── base.py           # 基础模型
 │   │
 │   ├── schemas/              # Pydantic数据模型
@@ -183,6 +193,7 @@ backend/
 │   │   ├── outline.py        # 大纲请求/响应模型
 │   │   ├── assembly.py
 │   │   ├── refinement.py
+│   │   ├── generation.py     # 智能生成请求/响应模型
 │   │   └── common.py
 │   │
 │   ├── services/             # 业务逻辑层
@@ -192,6 +203,9 @@ backend/
 │   │   ├── outline_service.py    # 大纲生成服务
 │   │   ├── assembly_service.py
 │   │   ├── refinement_service.py
+│   │   ├── generation_service.py # PPT智能生成服务
+│   │   ├── web_search_service.py # 联网搜索服务
+│   │   ├── template_service.py   # 模板管理服务
 │   │   ├── export_service.py
 │   │   └── retrieval_service.py
 │   │
@@ -359,53 +373,57 @@ deployment/
 ### 7.1 前端模块依赖
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│                        页面层 (Pages)                              │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐ │
-│  │ Library  │ │ Outline  │ │ Assembly │ │Refinement│ │ Drafts  │ │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬────┘ │
-└───────┼────────────┼────────────┼────────────┼────────────┼──────┘
-        │            │            │            │            │
-        └────────────┴─────┬──────┴────────────┴────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             页面层 (Pages)                                    │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────┐ │
+│  │ Library  │ │ Outline  │ │ Assembly │ │Refinement│ │Generation│ │ Drafts│ │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └───┬───┘ │
+└───────┼────────────┼────────────┼────────────┼────────────┼───────────┼─────┘
+        │            │            │            │            │           │
+        └────────────┴─────┬──────┴────────────┴────────────┴───────────┘
                            ▼
-┌───────────────────────────────────────────────────────────────────┐
-│                      业务组件层                                    │
-│  ┌──────────┐ ┌──────────────┐ ┌──────────┐ ┌──────────────────┐ │
-│  │ Document │ │   Outline    │ │ Assembly │ │   Refinement     │ │
-│  │Components│ │  Components  │ │Components│ │   Components     │ │
-│  └────┬─────┘ └──────┬───────┘ └────┬─────┘ └────────┬─────────┘ │
-└───────┼──────────────┼──────────────┼────────────────┼───────────┘
-        │              │              │                │
-        └──────────────┴──────┬───────┴────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           业务组件层                                          │
+│  ┌──────────┐ ┌──────────────┐ ┌──────────┐ ┌──────────┐ ┌────────────────┐ │
+│  │ Document │ │   Outline    │ │ Assembly │ │Refinement│ │   Generation   │ │
+│  │Components│ │  Components  │ │Components│ │Components│ │   Components   │ │
+│  └────┬─────┘ └──────┬───────┘ └────┬─────┘ └────┬─────┘ └───────┬────────┘ │
+└───────┼──────────────┼──────────────┼────────────┼───────────────┼──────────┘
+        │              │              │            │               │
+        └──────────────┴──────┬───────┴────────────┴───────────────┘
                               ▼
-┌───────────────────────────────────────────────────────────────────┐
-│                      基础层                                        │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐           │
-│  │   API    │ │  Stores  │ │  Hooks   │ │ Components │           │
-│  │  Layer   │ │(Zustand) │ │          │ │  (Common)  │           │
-│  └──────────┘ └──────────┘ └──────────┘ └────────────┘           │
-└───────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           基础层                                              │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐                      │
+│  │   API    │ │  Stores  │ │  Hooks   │ │ Components │                      │
+│  │  Layer   │ │(Zustand) │ │          │ │  (Common)  │                      │
+│  └──────────┘ └──────────┘ └──────────┘ └────────────┘                      │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 7.2 后端模块依赖
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│                      API 层 (Routers)                              │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────────┐ │
-│  │/documents│ │ /outline │ │/assembly │ │    /refinement       │ │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────────┬───────────┘ │
-└───────┼────────────┼────────────┼──────────────────┼─────────────┘
-        │            │            │                  │
-        └────────────┴─────┬──────┴──────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           API 层 (Routers)                                    │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────────────┐ │
+│  │/documents│ │ /outline │ │/assembly │ │/refinement│ │    /generation     │ │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬──────┘ └─────────┬──────────┘ │
+└───────┼────────────┼────────────┼────────────┼──────────────────┼────────────┘
+        │            │            │            │                  │
+        └────────────┴─────┬──────┴────────────┴──────────────────┘
                            ▼
-┌───────────────────────────────────────────────────────────────────┐
-│                    Service 层（业务逻辑）                           │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────────┐ │
-│  │ Document │ │ Outline  │ │ Assembly │ │     Refinement       │ │
-│  │ Service  │ │ Service  │ │ Service  │ │      Service         │ │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────────────────┘ │
-└───────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       Service 层（业务逻辑）                                   │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────────────┐ │
+│  │ Document │ │ Outline  │ │ Assembly │ │Refinement│ │     Generation     │ │
+│  │ Service  │ │ Service  │ │ Service  │ │ Service  │ │      Service       │ │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └────────────────────┘ │
+│                                                      ┌────────────────────┐ │
+│                                                      │  WebSearch/Template│ │
+│                                                      │      Services      │ │
+│                                                      └────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
                            │
           ┌────────────────┼────────────────┐
           ▼                ▼                ▼
@@ -499,6 +517,41 @@ Frontend                    Backend                     VectorDB
    │ <─────────────────────── │                           │
 ```
 
+### 8.4 PPT智能生成流程
+
+```
+Frontend                    Backend                     WebSearch/LLM
+   │                          │                           │
+   │  1. 提交生成请求          │                           │
+   │     (主题/页数/模板)      │                           │
+   │ ───────────────────────> │                           │
+   │                          │  2. 创建生成任务           │
+   │                          │  3. 联网搜索               │
+   │                          │ ────────────────────────> │
+   │  4. WebSocket进度推送     │ <──────────────────────── │
+   │ <─────────────────────── │  (搜索中: 10%)             │
+   │                          │                           │
+   │                          │  5. 内容分析               │
+   │                          │ ────────────────────────> │
+   │  6. WebSocket进度推送     │ <──────────────────────── │
+   │ <─────────────────────── │  (分析中: 30%)             │
+   │                          │                           │
+   │                          │  7. 逐页生成PPT内容        │
+   │                          │ ────────────────────────> │
+   │  8. WebSocket进度推送     │ <──────────────────────── │
+   │ <─────────────────────── │  (生成中: 40-80%)          │
+   │                          │                           │
+   │                          │  9. 应用风格模板           │
+   │  10. WebSocket进度推送    │  (应用风格: 85%)           │
+   │ <─────────────────────── │                           │
+   │                          │                           │
+   │  11. 生成完成             │  12. 保存生成结果          │
+   │ <─────────────────────── │  (完成: 100%)              │
+   │                          │                           │
+   │  13. 预览/进入精修        │                           │
+   │ ───────────────────────> │                           │
+```
+
 ---
 
 ## 9. 扩展性设计
@@ -556,16 +609,52 @@ Frontend                    Backend                     VectorDB
 │       └── outline.py              # 大纲Pydantic模型
 ```
 
-### 9.3 可替换组件
+### 9.3 PPT智能生成模块示例
 
-| 组件 | 当前实现 | 可替换方案 |
-|------|---------|-----------|
-| 向量数据库 | ChromaDB | 腾讯云向量数据库 |
-| 文件存储 | 本地文件系统 | 腾讯云COS |
-| LLM服务 | 可选/多模型支持 | 混元/文心/通义/OpenAI/自定义 |
-| 缓存 | Redis | 腾讯云Redis |
-| 数据库 | TDSQL-C MySQL | 腾讯云TDSQL |
-| 服务器 | 腾讯云TKE / 轻量服务器 | 腾讯云CVM |
+以PPT智能生成模块为例，展示包含联网搜索等复杂功能的模块结构：
+
+```
+前端新增文件：
+├── src/
+│   ├── api/
+│   │   └── generation.ts           # 生成API接口
+│   ├── pages/
+│   │   └── Generation/
+│   │       ├── index.tsx           # 生成页面主入口
+│   │       ├── index.css           # 生成页面样式
+│   │       └── components/
+│   │           ├── ProgressModal.tsx    # 生成进度弹窗
+│   │           └── TemplateCard.tsx     # 模板卡片组件
+│   ├── stores/
+│   │   └── generationStore.ts      # 生成状态管理
+│   └── types/
+│       └── generation.ts           # 生成类型定义
+
+后端新增文件：
+├── app/
+│   ├── api/v1/endpoints/
+│   │   └── generation.py           # 生成路由
+│   ├── services/
+│   │   ├── generation_service.py   # 生成服务
+│   │   ├── web_search_service.py   # 联网搜索服务
+│   │   └── template_service.py     # 模板管理服务
+│   ├── models/
+│   │   └── generation.py           # 生成任务模型
+│   └── schemas/
+│       └── generation.py           # 生成Pydantic模型
+```
+
+### 9.4 可替换组件
+
+| 组件 | 推荐实现（高性价比） | 备选方案（付费） |
+|------|---------------------|-----------------|
+| 向量数据库 | ChromaDB（本地免费） | 腾讯云向量数据库 |
+| 文件存储 | 本地文件系统 / MinIO | 腾讯云COS |
+| LLM服务 | 混元-lite免费额度 | 付费模型 |
+| 缓存 | 本地Redis容器 | 腾讯云Redis |
+| 数据库 | SQLite/本地MySQL | 腾讯云TDSQL-C |
+| 服务器 | 轻量服务器（促销价） | 腾讯云TKE/CVM |
+| 镜像仓库 | Docker Hub免费 | 腾讯云TCR |
 
 ---
 
@@ -594,349 +683,379 @@ Frontend                    Backend                     VectorDB
 
 ---
 
-## 11. 腾讯云部署方案
+## 11. 部署方案（高性价比优先）
 
 ### 11.1 部署架构选型
 
-| 场景 | 推荐方案 | 适用说明 |
-|------|---------|---------|
-| **生产环境（推荐）** | TKE容器服务 + TDSQL-C | 高可用、自动扩缩容 |
-| **中小规模** | 轻量服务器 + Docker Compose | 简单、低成本 |
-| **开发测试** | TKE Serverless | 按需付费、免运维 |
+| 场景 | 推荐方案 | 月成本预估 | 适用说明 |
+|------|---------|-----------|---------|
+| **开发测试（推荐）** | 本地 Docker Compose | ￥0 | 本机开发调试 |
+| **个人项目（⭐首选）** | 轻量服务器 + 全本地服务 | ￥35-50 | 新用户促销价，极致性价比 |
+| **小团队** | 轻量服务器 + 云数据库 | ￥60-100 | 数据更安全 |
+| **中大规模** | TKE Serverless | ￥200-500 | 按需计费，弹性扩缩 |
 
 ### 11.2 推荐资源配置
 
-#### 方案A：TKE容器服务（生产推荐）
+#### 方案A：极简部署（⭐⭐⭐ 最高性价比，首选推荐）
 
-| 组件 | 推荐配置 | 说明 |
-|------|---------|------|
-| TKE集群 | 标准集群 2-4节点 | 托管Master |
-| 工作节点 | 4核8G × 2 | 运行应用容器 |
-| TDSQL-C MySQL | 2核4G 100G存储 | 关系数据库 |
-| 腾讯云Redis | 1G内存 | 缓存/任务队列 |
-| 腾讯云COS | 标准存储 | 文件/缩略图存储 |
-| 腾讯云TCR | 标准版 | 容器镜像仓库 |
-| LLM API | 按量付费 | AI精修功能（可选） |
+> 💰 **月成本：￥35-50**  
+> 💡 **核心原则**：能本地就本地，能免费就免费，所有服务一台机器搞定
 
-#### 方案B：轻量服务器（中小规模）
+| 组件 | 推荐配置 | 月成本 | 说明 |
+|------|---------|--------|------|
+| **服务器** | 腾讯云轻量 2核2G 50G SSD 4M | ￥35-45 | 新用户首年特惠 |
+| **数据库** | SQLite（开发）/ MySQL Docker | ￥0 | 本地容器部署 |
+| **缓存** | Redis Docker 容器 | ￥0 | 本地容器部署 |
+| **向量库** | ChromaDB Docker 容器 | ￥0 | 本地容器部署 |
+| **文件存储** | 服务器本地磁盘 | ￥0 | 自带50G存储 |
+| **镜像仓库** | 阿里云ACR个人版 | ￥0 | 永久免费 |
+| **CI/CD** | GitHub Actions | ￥0 | 公开仓库无限制 |
+| **LLM服务** | 通义千问-turbo免费版 | ￥0 | 100万tokens/月 |
+| **CDN加速** | Cloudflare | ￥0 | 免费无限流量 |
+| **SSL证书** | Let's Encrypt | ￥0 | 免费自动续期 |
+| **合计** | - | **￥35-50/月** | - |
 
-| 组件 | 推荐配置 | 说明 |
-|------|---------|------|
-| 轻量服务器 | 4核8G 12M带宽 | 应用主服务器 |
-| TDSQL-C MySQL | 2核4G 100G存储 | 关系数据库 |
-| 腾讯云Redis | 1G内存 | 缓存/任务队列 |
-| 腾讯云COS | 标准存储 | 文件/缩略图存储 |
+**适用场景**：个人项目、小型团队（<10人）、日活<1000
 
-### 11.3 开发环境
+#### 方案B：进阶部署（数据安全优先）
+
+> 💰 **月成本：￥60-100**  
+> 💡 **适用场景**：对数据安全有要求，需要数据备份
+
+| 组件 | 推荐配置 | 月成本 | 说明 |
+|------|---------|--------|------|
+| **服务器** | 腾讯云轻量 2核4G 60G SSD 6M | ￥50-70 | 新用户首年特惠 |
+| **数据库** | TDSQL-C Serverless | ￥5-30 | 按量计费，空闲几乎免费 |
+| **缓存** | Redis Docker 容器 | ￥0 | 本地部署即可 |
+| **向量库** | ChromaDB Docker 容器 | ￥0 | 本地部署 |
+| **文件存储** | 腾讯云COS | ￥0-5 | 50G免费额度 |
+| **LLM服务** | 混元-lite 免费额度 | ￥0 | 50万tokens/月 |
+| **合计** | - | **￥60-100/月** | - |
+
+#### 方案C：弹性部署（中大规模）
+
+> 💰 **月成本：￥200-500**  
+> 💡 **适用场景**：用户量波动大，需要弹性扩缩
+
+| 组件 | 推荐配置 | 月成本 | 说明 |
+|------|---------|--------|------|
+| **计算** | TKE Serverless | ￥100-300 | 按实际使用计费 |
+| **数据库** | TDSQL-C Serverless | ￥30-100 | 自动扩缩 |
+| **缓存** | 腾讯云Redis 256MB | ￥30-50 | 最小规格 |
+| **文件存储** | 腾讯云COS | ￥10-30 | 按量计费 |
+| **合计** | - | **￥200-500/月** | - |
+
+### 11.3 免费资源一览表
+
+| 服务类型 | 服务商 | 免费额度 | 有效期 | 推荐指数 |
+|---------|-------|---------|--------|---------|
+| **LLM服务** | | | | |
+| 通义千问 qwen-turbo | 阿里云 | 100万tokens/月 | 永久 | ⭐⭐⭐⭐⭐ |
+| 混元-lite | 腾讯云 | 50万tokens/月 | 需申请 | ⭐⭐⭐⭐ |
+| 文心 ERNIE-Lite-8K | 百度 | 免费调用 | 永久 | ⭐⭐⭐⭐ |
+| GLM-4-Flash | 智谱AI | 免费调用 | 永久 | ⭐⭐⭐⭐ |
+| **对象存储** | | | | |
+| 腾讯云COS | 腾讯云 | 50GB + 10GB流量/月 | 6个月 | ⭐⭐⭐⭐ |
+| 阿里云OSS | 阿里云 | 5GB存储 | 永久 | ⭐⭐⭐ |
+| **容器镜像** | | | | |
+| 腾讯云个人版CCR | 腾讯云 | 无限镜像 | 永久 | ⭐⭐⭐⭐⭐ |
+| Docker Hub | Docker | 1私有+无限公开仓库 | 永久 | ⭐⭐⭐⭐ |
+| **CI/CD** | | | | |
+| GitHub Actions | GitHub | 2000分钟/月 | 永久 | ⭐⭐⭐⭐⭐ |
+| Gitee Go | Gitee | 200分钟/月 | 永久 | ⭐⭐⭐ |
+| **CDN/网络** | | | | |
+| Cloudflare CDN | Cloudflare | 无限流量 | 永久 | ⭐⭐⭐⭐⭐ |
+| **SSL证书** | | | | |
+| Let's Encrypt | ISRG | 免费证书 | 永久 | ⭐⭐⭐⭐⭐ |
+| 腾讯云免费证书 | 腾讯云 | 1年DV证书 | 可续期 | ⭐⭐⭐⭐ |
+| **数据库** | | | | |
+| TDSQL-C Serverless | 腾讯云 | 按量计费（空闲￥0） | 永久 | ⭐⭐⭐⭐ |
+| PlanetScale | PlanetScale | 5GB存储 | 永久 | ⭐⭐⭐ |
+
+### 11.4 服务器选购指南
+
+#### 腾讯云轻量服务器活动价参考
+
+| 配置 | 原价 | 新用户首年 | 续费价 | 推荐场景 |
+|------|-----|-----------|-------|---------|
+| 2核2G 50G 4M | ￥100+/月 | ￥35-45/月 | ￥60-80/月 | 个人项目 |
+| 2核4G 60G 6M | ￥150+/月 | ￥50-70/月 | ￥100-120/月 | 小团队 |
+| 4核8G 80G 10M | ￥300+/月 | ￥100-150/月 | ￥200+/月 | 中型项目 |
+
+> 💡 **省钱技巧**：
+> 1. 关注腾讯云/阿里云大促活动（618、双11、年终）
+> 2. 新用户首单优惠力度最大，建议一次买3年
+> 3. 轻量服务器性价比 > CVM
+> 4. 竞价实例适合可中断的任务（便宜50-80%）
+
+### 11.5 开发环境
 
 ```bash
-# 本地开发
+# 本地开发（零成本）
 # 前端
 cd frontend && npm run dev
 
-# 后端
+# 后端（使用SQLite作为开发数据库）
 cd backend && uvicorn app.main:app --reload
 
-# 任务队列
+# 任务队列（可选，开发时可跳过）
 cd workers && celery -A app.celery_app worker --loglevel=info
 ```
 
-### 11.4 TKE容器服务部署
+### 11.6 一键部署（轻量服务器）
 
 ```bash
-# 1. 配置kubectl连接TKE集群
-# 在腾讯云控制台获取kubeconfig并配置
-
-# 2. 创建命名空间和配置
-kubectl apply -k deployment/tke/overlays/production
-
-# 3. 部署应用
-kubectl apply -f deployment/tke/deployments/
-kubectl apply -f deployment/tke/services/
-
-# 4. 查看部署状态
-kubectl get pods -n ppt-rsd-prod
-kubectl get svc -n ppt-rsd-prod
-```
-
-### 11.5 轻量服务器部署
-
-```bash
-# 1. 初始化轻量服务器
+# 1. 购买轻量服务器后SSH登录
 ssh root@<lighthouse-ip>
-curl -fsSL https://get.docker.com | bash
 
-# 2. 克隆代码并部署
+# 2. 安装 Docker（一键脚本）
+curl -fsSL https://get.docker.com | bash
+systemctl enable docker && systemctl start docker
+
+# 3. 安装 Docker Compose
+curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+
+# 4. 克隆代码并部署
 git clone <repo-url> /opt/ppt-rsd
 cd /opt/ppt-rsd/deployment/docker
-docker-compose -f docker-compose.prod.yml up -d
+cp .env.example .env
+
+# 5. 配置免费 LLM API（选一个）
+# 通义千问免费版（推荐）：https://dashscope.console.aliyun.com/
+# 混元免费版：https://cloud.tencent.com/product/hunyuan
+
+# 6. 启动所有服务
+docker-compose up -d
+
+# 7. 配置免费SSL（使用 certbot）
+apt install certbot python3-certbot-nginx -y
+certbot --nginx -d your-domain.com
 ```
 
-### 11.6 腾讯云环境变量配置
+### 11.7 环境变量配置（高性价比版）
 
 ```bash
-# .env.production
-# 数据库 - TDSQL-C MySQL
-DATABASE_URL=mysql+pymysql://user:pass@<tdsql-endpoint>:3306/ppt_rsd
+# .env.production（优先使用免费服务）
 
-# Redis - 腾讯云Redis
-REDIS_URL=redis://:<password>@<redis-endpoint>:6379/0
+# ============================================
+# 数据库配置（本地Docker容器，￥0）
+# ============================================
+DATABASE_URL=mysql+pymysql://root:password@mysql:3306/ppt_rsd
 
-# COS - 腾讯云对象存储
-COS_SECRET_ID=your-secret-id
-COS_SECRET_KEY=your-secret-key
-COS_REGION=ap-guangzhou
-COS_BUCKET=ppt-rsd-files
+# ============================================
+# Redis配置（本地Docker容器，￥0）
+# ============================================
+REDIS_URL=redis://redis:6379/0
 
-# TCR - 容器镜像仓库
-TCR_REGISTRY=ccr.ccs.tencentyun.com
-TCR_NAMESPACE=ppt-rsd
+# ============================================
+# 文件存储（本地磁盘，￥0）
+# ============================================
+STORAGE_TYPE=local
+STORAGE_PATH=/app/data
 
-# ================================
-# LLM 模型配置（可选，至少配置一个）
-# ================================
+# 如需使用云存储（有50G免费额度）
+# STORAGE_TYPE=cos
+# COS_SECRET_ID=your-secret-id
+# COS_SECRET_KEY=your-secret-key
+# COS_REGION=ap-guangzhou
+# COS_BUCKET=ppt-rsd-files
 
-# 是否启用LLM功能
+# ============================================
+# LLM 配置（优先使用免费额度）
+# ============================================
 LLM_ENABLED=true
 
-# 默认模型提供商
-LLM_DEFAULT_PROVIDER=hunyuan
+# 推荐方案1：通义千问免费版（100万tokens/月）⭐推荐
+LLM_DEFAULT_PROVIDER=qwen
+QWEN_API_KEY=your-dashscope-api-key
+QWEN_MODEL=qwen-turbo  # 免费版
 
-# 腾讯混元大模型
-HUNYUAN_SECRET_ID=your-secret-id
-HUNYUAN_SECRET_KEY=your-secret-key
-HUNYUAN_MODEL=hunyuan-lite
+# 推荐方案2：混元-lite（50万tokens/月）
+# LLM_DEFAULT_PROVIDER=hunyuan
+# HUNYUAN_SECRET_ID=your-secret-id
+# HUNYUAN_SECRET_KEY=your-secret-key
+# HUNYUAN_MODEL=hunyuan-lite
 
-# 百度文心一言
-WENXIN_API_KEY=your-api-key
-WENXIN_SECRET_KEY=your-secret-key
-WENXIN_MODEL=ernie-lite-8k
+# 推荐方案3：文心免费版
+# LLM_DEFAULT_PROVIDER=wenxin
+# WENXIN_API_KEY=your-api-key
+# WENXIN_SECRET_KEY=your-secret-key
+# WENXIN_MODEL=ernie-lite-8k  # 免费
 
-# 阿里通义千问
-QWEN_API_KEY=your-api-key
-QWEN_MODEL=qwen-turbo
+# 推荐方案4：智谱GLM免费版
+# LLM_DEFAULT_PROVIDER=zhipu
+# ZHIPU_API_KEY=your-api-key
+# ZHIPU_MODEL=glm-4-flash  # 免费
 
-# OpenAI
-OPENAI_API_KEY=your-api-key
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-3.5-turbo
-
-# Claude
-CLAUDE_API_KEY=your-api-key
-CLAUDE_MODEL=claude-3-haiku-20240307
-
-# 自定义模型（OpenAI兼容格式）
-CUSTOM_MODEL_NAME=my-custom-model
-CUSTOM_API_URL=https://your-custom-api.com/v1
-CUSTOM_API_KEY=your-api-key
-CUSTOM_MODEL_IDENTIFIER=gpt-4
+# ============================================
+# 镜像仓库（使用腾讯云个人版镜像仓库，免费）
+# ============================================
+REGISTRY=ccr.ccs.tencentyun.com
+REGISTRY_NAMESPACE=codebuddy-ppt-creator
 ```
 
 ---
 
-## 12. CI/CD 流水线配置
+## 12. CI/CD 流水线配置（免费方案）
 
 ### 12.1 方案选型
 
-| 方案 | 适用场景 | 特点 |
-|------|---------|------|
-| **腾讯云CODING** | 代码在CODING | 与腾讯云深度集成 |
-| **GitHub Actions + TCR** | 代码在GitHub | 国际化、生态丰富 |
+| 方案 | 成本 | 适用场景 | 推荐指数 |
+|------|-----|---------|---------|
+| **GitHub Actions** | ￥0 | 公开仓库 | ⭐⭐⭐⭐⭐ |
+| **Gitee Go** | ￥0 | 私有仓库（200分钟/月） | ⭐⭐⭐ |
+| **腾讯云CODING** | 按量计费 | 企业私有部署 | ⭐⭐⭐ |
 
-### 12.2 CODING 流水线配置
-
-```yaml
-# deployment/cicd/coding/coding-ci.yaml
-# 构建流水线：代码提交 → 构建镜像 → 推送到TCR
-
-stages:
-  - checkout
-  - build
-  - push
-  - deploy
-
-# 构建前端镜像
-build-frontend:
-  stage: build
-  script:
-    - docker build -t $TCR_REGISTRY/$TCR_NAMESPACE/frontend:$CI_COMMIT_SHA -f deployment/docker/Dockerfile.frontend .
-    - docker push $TCR_REGISTRY/$TCR_NAMESPACE/frontend:$CI_COMMIT_SHA
-
-# 构建后端镜像
-build-backend:
-  stage: build
-  script:
-    - docker build -t $TCR_REGISTRY/$TCR_NAMESPACE/backend:$CI_COMMIT_SHA -f deployment/docker/Dockerfile.backend .
-    - docker push $TCR_REGISTRY/$TCR_NAMESPACE/backend:$CI_COMMIT_SHA
-
-# 构建Worker镜像
-build-worker:
-  stage: build
-  script:
-    - docker build -t $TCR_REGISTRY/$TCR_NAMESPACE/worker:$CI_COMMIT_SHA -f deployment/docker/Dockerfile.worker .
-    - docker push $TCR_REGISTRY/$TCR_NAMESPACE/worker:$CI_COMMIT_SHA
-
-# 部署到TKE
-deploy-tke:
-  stage: deploy
-  script:
-    - kubectl set image deployment/frontend frontend=$TCR_REGISTRY/$TCR_NAMESPACE/frontend:$CI_COMMIT_SHA -n ppt-rsd-prod
-    - kubectl set image deployment/backend backend=$TCR_REGISTRY/$TCR_NAMESPACE/backend:$CI_COMMIT_SHA -n ppt-rsd-prod
-    - kubectl set image deployment/worker worker=$TCR_REGISTRY/$TCR_NAMESPACE/worker:$CI_COMMIT_SHA -n ppt-rsd-prod
-```
-
-### 12.3 GitHub Actions 配置
+### 12.2 GitHub Actions + 腾讯云CCR（完全免费）
 
 ```yaml
-# .github/workflows/deploy-tke.yml
-name: Build and Deploy to TKE
+# .github/workflows/deploy.yml
+name: Build and Deploy
 
 on:
   push:
     branches: [main]
 
+env:
+  REGISTRY: registry.cn-hangzhou.aliyuncs.com
+  NAMESPACE: your-namespace
+
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
-      # 登录腾讯云TCR
-      - name: Login to TCR
-        uses: docker/login-action@v2
+      # 登录腾讯云个人版镜像仓库（免费）
+      - name: Login to Tencent CCR
+        uses: docker/login-action@v3
         with:
-          registry: ccr.ccs.tencentyun.com
+          registry: ${{ env.REGISTRY }}
           username: ${{ secrets.TCR_USERNAME }}
           password: ${{ secrets.TCR_PASSWORD }}
       
       # 构建并推送镜像
-      - name: Build and Push
+      - name: Build and Push Images
         run: |
-          docker build -t ccr.ccs.tencentyun.com/ppt-rsd/frontend:${{ github.sha }} -f deployment/docker/Dockerfile.frontend .
-          docker build -t ccr.ccs.tencentyun.com/ppt-rsd/backend:${{ github.sha }} -f deployment/docker/Dockerfile.backend .
-          docker build -t ccr.ccs.tencentyun.com/ppt-rsd/worker:${{ github.sha }} -f deployment/docker/Dockerfile.worker .
-          docker push ccr.ccs.tencentyun.com/ppt-rsd/frontend:${{ github.sha }}
-          docker push ccr.ccs.tencentyun.com/ppt-rsd/backend:${{ github.sha }}
-          docker push ccr.ccs.tencentyun.com/ppt-rsd/worker:${{ github.sha }}
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      # 配置TKE访问凭证
-      - name: Configure TKE Credentials
-        uses: tencentcloud/tke-cluster-credential-action@v1
-        with:
-          secret_id: ${{ secrets.TENCENT_CLOUD_SECRET_ID }}
-          secret_key: ${{ secrets.TENCENT_CLOUD_SECRET_KEY }}
-          tke_region: ap-guangzhou
-          cluster_id: ${{ secrets.TKE_CLUSTER_ID }}
+          # 前端
+          docker build -t $REGISTRY/$NAMESPACE/frontend:${{ github.sha }} -f deployment/docker/Dockerfile.frontend .
+          docker push $REGISTRY/$NAMESPACE/frontend:${{ github.sha }}
+          
+          # 后端
+          docker build -t $REGISTRY/$NAMESPACE/backend:${{ github.sha }} -f deployment/docker/Dockerfile.backend .
+          docker push $REGISTRY/$NAMESPACE/backend:${{ github.sha }}
       
-      # 部署到TKE
-      - name: Deploy to TKE
-        run: |
-          kubectl set image deployment/frontend frontend=ccr.ccs.tencentyun.com/ppt-rsd/frontend:${{ github.sha }} -n ppt-rsd-prod
-          kubectl set image deployment/backend backend=ccr.ccs.tencentyun.com/ppt-rsd/backend:${{ github.sha }} -n ppt-rsd-prod
-          kubectl set image deployment/worker worker=ccr.ccs.tencentyun.com/ppt-rsd/worker:${{ github.sha }} -n ppt-rsd-prod
-          kubectl rollout status deployment/frontend -n ppt-rsd-prod
-          kubectl rollout status deployment/backend -n ppt-rsd-prod
+      # SSH部署到轻量服务器
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/ppt-rsd
+            docker-compose pull
+            docker-compose up -d
+            docker image prune -f
 ```
 
-### 12.4 流水线流程图
+### 12.3 简化部署流程图
 
 ```
-代码提交 (Git Push)
+代码推送 (git push)
     │
     ▼
-┌─────────────────┐
-│   CODING /      │
-│ GitHub Actions  │
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    ▼         ▼
-┌────────┐ ┌────────┐ ┌────────┐
-│ 构建前端 │ │ 构建后端 │ │ 构建Worker│
-└───┬────┘ └───┬────┘ └───┬────┘
-    │          │          │
-    └──────────┼──────────┘
-               ▼
-    ┌──────────────────────┐
-    │  推送镜像到TCR        │
-    │  (腾讯云容器镜像服务)  │
-    └──────────┬───────────┘
-               │
-               ▼
-    ┌──────────────────────┐
-    │   部署到TKE集群       │
-    │  (腾讯云容器服务)     │
-    └──────────────────────┘
+┌─────────────────────┐
+│   GitHub Actions    │  ← 免费 2000分钟/月
+│   (自动触发)         │
+└──────────┬──────────┘
+           │
+    ┌──────┴──────┐
+    ▼             ▼
+┌────────┐   ┌────────┐
+│构建前端 │   │构建后端 │  ← 并行构建
+└───┬────┘   └───┬────┘
+    │            │
+    └──────┬─────┘
+           ▼
+┌─────────────────────┐
+│  推送到腾讯云CCR     │  ← 免费镜像仓库
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  SSH部署到服务器     │  ← docker-compose up -d
+└─────────────────────┘
 ```
-
-### 12.5 环境管理
-
-| 环境 | 部署方式 | 触发条件 |
-|------|---------|---------|
-| 开发环境 | TKE Serverless / 本地 | 功能分支推送 |
-| 测试环境 | TKE标准集群 | develop分支合并 |
-| 生产环境 | TKE标准集群 | main分支合并 + 手动确认 |
 
 ---
 
-## 13. LLM 模型配置指南
+## 13. LLM 模型配置指南（免费优先）
 
-### 13.1 支持的模型提供商
+### 13.1 免费LLM服务推荐
 
-| 提供商 | 配置项 | 说明 |
-|--------|--------|------|
-| **腾讯混元** | `hunyuan` | 国内首选，中文优化 |
-| **百度文心** | `wenxin` | 百度生态 |
-| **阿里通义** | `qwen` | 阿里生态 |
-| **OpenAI** | `openai` | 国际通用 |
-| **Claude** | `claude` | Anthropic |
-| **自定义** | `custom` | OpenAI兼容格式 |
+| 提供商 | 免费模型 | 免费额度 | 申请链接 | 推荐指数 |
+|--------|---------|---------|---------|---------|
+| **阿里通义** | qwen-turbo | 100万tokens/月 | [控制台](https://dashscope.console.aliyun.com/) | ⭐⭐⭐⭐⭐ |
+| **智谱AI** | glm-4-flash | 无限制 | [开放平台](https://open.bigmodel.cn/) | ⭐⭐⭐⭐⭐ |
+| **百度文心** | ernie-lite-8k | 免费调用 | [千帆平台](https://qianfan.cloud.baidu.com/) | ⭐⭐⭐⭐ |
+| **腾讯混元** | hunyuan-lite | 50万tokens/月 | [控制台](https://cloud.tencent.com/product/hunyuan) | ⭐⭐⭐⭐ |
+| **讯飞星火** | spark-lite | 200万tokens | [开放平台](https://xinghuo.xfyun.cn/) | ⭐⭐⭐ |
 
-### 13.2 模型选择建议
+### 13.2 配置优先级建议
 
-| 场景 | 推荐模型 | 原因 |
-|------|---------|------|
-| 国内部署 | 腾讯混元/文心/通义 | 国内访问快、合规 |
-| 国际部署 | OpenAI/Claude | 性能稳定 |
-| 私有化 | 自定义模型 | 数据安全 |
-| 成本敏感 | 混元-lite/文心-lite | 免费/低价档位 |
+```bash
+# 推荐配置顺序（按性价比排序）
 
-### 13.3 自定义模型接入
+# 1️⃣ 首选：通义千问免费版（100万tokens/月，效果好）
+LLM_DEFAULT_PROVIDER=qwen
+QWEN_API_KEY=sk-xxx
+QWEN_MODEL=qwen-turbo
 
-```python
-# backend/app/infrastructure/llm/custom/my_model.py
-from app.infrastructure.llm.providers.custom import CustomLLMProvider
+# 2️⃣ 备选：智谱GLM免费版（无限制，响应快）
+# LLM_DEFAULT_PROVIDER=zhipu
+# ZHIPU_API_KEY=xxx
+# ZHIPU_MODEL=glm-4-flash
 
-class MyCustomModel(CustomLLMProvider):
-    """自定义模型示例"""
-    
-    def __init__(self, config: dict):
-        super().__init__(config)
-        self.api_url = config.get('api_url')
-        self.model_name = config.get('model_name')
-    
-    async def chat(self, messages: list, **kwargs) -> str:
-        # 实现自定义调用逻辑
-        response = await self._call_api(messages)
-        return response
-
-# 在配置中注册
-# .env
-CUSTOM_MODEL_NAME=my-custom-model
-CUSTOM_API_URL=https://your-api.com/v1/chat
-CUSTOM_API_KEY=your-key
+# 3️⃣ 备选：文心免费版（稳定可靠）
+# LLM_DEFAULT_PROVIDER=wenxin
+# WENXIN_API_KEY=xxx
+# WENXIN_SECRET_KEY=xxx
+# WENXIN_MODEL=ernie-lite-8k
 ```
+
+### 13.3 模型能力对比
+
+| 模型 | 中文理解 | 响应速度 | 上下文长度 | 适用场景 |
+|------|---------|---------|-----------|---------|
+| qwen-turbo | ⭐⭐⭐⭐⭐ | 快 | 8K | 通用对话、内容生成 |
+| glm-4-flash | ⭐⭐⭐⭐ | 极快 | 128K | 长文本处理 |
+| ernie-lite-8k | ⭐⭐⭐⭐ | 快 | 8K | 中文理解 |
+| hunyuan-lite | ⭐⭐⭐⭐ | 中等 | 8K | 腾讯生态集成 |
 
 ### 13.4 功能降级策略
 
-当LLM服务不可用时，系统支持功能降级：
-- **精修功能禁用**：保留基础组装功能
-- **本地规则替代**：简单文本替换使用本地规则
-- **缓存结果复用**：使用历史相似修改建议
+当LLM服务不可用或额度用尽时，系统支持功能降级：
+
+| 功能 | 有LLM | 无LLM（降级） |
+|------|-------|--------------|
+| 智能大纲生成 | ✅ AI生成 | ⚠️ 使用预设模板 |
+| AI精修建议 | ✅ 智能建议 | ⚠️ 基于规则的建议 |
+| 内容优化 | ✅ AI优化 | ❌ 功能禁用 |
+| 基础组装 | ✅ 正常 | ✅ 正常（不受影响）|
+
+### 13.5 成本控制建议
+
+```python
+# 后端配置：限制每日调用量
+LLM_DAILY_LIMIT=10000  # 每日最大调用tokens
+LLM_CACHE_ENABLED=true  # 启用响应缓存
+LLM_CACHE_TTL=3600      # 缓存1小时
+
+# 前端配置：防抖避免重复调用
+DEBOUNCE_DELAY=500      # 500ms防抖
+```
 
 ---
 
@@ -955,5 +1074,5 @@ CUSTOM_API_KEY=your-key
 
 ---
 
-*文档版本：v1.1*  
-*最后更新：2026-02-09*
+*文档版本：v1.2*  
+*最后更新：2026-02-24*
