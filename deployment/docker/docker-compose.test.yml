@@ -1,0 +1,129 @@
+# ============================================
+# PPT-RSD 测试环境 Docker Compose
+# 用于 CI/CD 流水线自动化测试
+# ============================================
+
+version: '3.8'
+
+services:
+  # ============================================
+  # MySQL 测试数据库
+  # ============================================
+  mysql-test:
+    image: mysql:8.0
+    container_name: ppt-rsd-mysql-test
+    environment:
+      MYSQL_ROOT_PASSWORD: test_password
+      MYSQL_DATABASE: ppt_rsd_test
+      MYSQL_USER: test_user
+      MYSQL_PASSWORD: test_password
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_test_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # ============================================
+  # Redis 测试缓存
+  # ============================================
+  redis-test:
+    image: redis:7-alpine
+    container_name: ppt-rsd-redis-test
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # ============================================
+  # 后端测试服务
+  # ============================================
+  backend-test:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.backend
+    container_name: ppt-rsd-backend-test
+    environment:
+      - APP_ENV=test
+      - DEBUG=true
+      - DATABASE_URL=mysql+pymysql://test_user:test_password@mysql-test:3306/ppt_rsd_test
+      - REDIS_URL=redis://redis-test:6379/0
+      - SECRET_KEY=test-secret-key-for-testing
+      - LLM_ENABLED=false
+      - STORAGE_TYPE=local
+      - STORAGE_PATH=/app/data
+    ports:
+      - "8001:8000"
+    volumes:
+      - test_uploads:/app/data
+    depends_on:
+      mysql-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - test-network
+
+  # ============================================
+  # 前端测试服务
+  # ============================================
+  frontend-test:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.frontend
+    container_name: ppt-rsd-frontend-test
+    ports:
+      - "3001:80"
+    depends_on:
+      backend-test:
+        condition: service_healthy
+    networks:
+      - test-network
+
+  # ============================================
+  # 测试运行器
+  # ============================================
+  test-runner:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.test
+    container_name: ppt-rsd-test-runner
+    environment:
+      - TEST_API_URL=http://backend-test:8000
+      - DATABASE_URL=mysql+pymysql://test_user:test_password@mysql-test:3306/ppt_rsd_test
+      - REDIS_URL=redis://redis-test:6379/0
+    volumes:
+      - ../../tests:/app/tests
+      - test_results:/app/results
+    depends_on:
+      backend-test:
+        condition: service_healthy
+    command: ["pytest", "tests/", "-v", "--tb=short", "--junitxml=/app/results/junit.xml", "--cov=app", "--cov-report=xml:/app/results/coverage.xml", "--cov-report=html:/app/results/htmlcov"]
+    networks:
+      - test-network
+
+volumes:
+  mysql_test_data:
+  test_uploads:
+  test_results:
+
+networks:
+  test-network:
+    driver: bridge
