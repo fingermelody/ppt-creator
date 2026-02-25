@@ -14,6 +14,9 @@ __pycache__/
 .env.production
 .env.development
 
+# Deployment configs with secrets
+deployment/production/config.env
+
 # Secret keys and credentials
 *SecretKey*
 *secret*
@@ -44,6 +47,7 @@ yarn-error.log*
 dist/
 build/
 *.egg-info/
+.serverless/
 
 # Database
 *.db

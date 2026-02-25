@@ -5,6 +5,7 @@ FastAPI 主应用入口
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from mangum import Mangum
 
 from app.core.config import settings
 from app.api.v1 import api_router
@@ -52,6 +53,9 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+# SCF 事件函数入口 - 用于 API 网关集成
+handler = Mangum(app, lifespan="off")
 
 
 if __name__ == "__main__":

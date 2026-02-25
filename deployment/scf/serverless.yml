@@ -1,149 +1,59 @@
 # ============================================
 # 腾讯云 SCF Serverless 部署配置
-# PPT-RSD 项目
+# PPT-RSD 项目 - 后端 API
 # ============================================
 
-# 全局配置
+component: scf
+name: ppt-rsd-backend
 app: ppt-rsd
 stage: ${env:STAGE, 'dev'}
 
-# ============================================
-# 后端 API 服务 - SCF Web 函数
-# ============================================
-backend:
-  component: scf
-  name: ppt-rsd-backend
-  inputs:
-    name: ppt-rsd-backend-${stage}
-    # Web 函数类型
-    type: web
-    # 运行环境
-    runtime: Python3.9
-    # 地域
-    region: ${env:REGION, 'ap-guangzhou'}
-    # 源代码
-    src:
-      src: ../../backend
-      exclude:
-        - .git/**
-        - .gitignore
-        - __pycache__/**
-        - "*.pyc"
-        - .env
-        - .env.*
-        - tests/**
-        - "*.md"
-    # Web 函数配置
-    entryFile: scf_bootstrap
-    # 内存配置 (MB)
-    memorySize: 512
-    # 超时时间 (秒)
-    timeout: 30
-    # 环境变量
-    environment:
-      variables:
-        STAGE: ${stage}
-        DATABASE_URL: ${env:DATABASE_URL}
-        REDIS_URL: ${env:REDIS_URL}
-        SECRET_KEY: ${env:SECRET_KEY}
-        COS_BUCKET: ${env:COS_BUCKET}
-        COS_REGION: ${env:COS_REGION}
-        COS_SECRET_ID: ${env:COS_SECRET_ID}
-        COS_SECRET_KEY: ${env:COS_SECRET_KEY}
-    # VPC 配置（如需访问内网资源）
-    vpcConfig:
-      vpcId: ${env:VPC_ID, ''}
-      subnetId: ${env:SUBNET_ID, ''}
-    # API 网关触发器
-    events:
-      - apigw:
-          parameters:
-            serviceName: ppt-rsd-api-${stage}
-            description: PPT-RSD Backend API
-            protocols:
-              - https
-              - http
-            environment: release
-            endpoints:
-              - path: /
-                method: ANY
-                enableCORS: true
-              - path: /{proxy+}
-                method: ANY
-                enableCORS: true
-
-# ============================================
-# 前端静态网站 - COS + CDN
-# ============================================
-frontend:
-  component: website
-  name: ppt-rsd-frontend
-  inputs:
-    # 源代码目录
-    src:
-      src: ../../frontend/dist
-      index: index.html
-      error: index.html
-    # 地域
-    region: ${env:REGION, 'ap-guangzhou'}
-    # 存储桶名称
-    bucketName: ppt-rsd-frontend-${stage}
-    # 协议
-    protocol: https
-    # 自定义域名（可选）
-    # hosts:
-    #   - host: ppt.example.com
-    #     https:
-    #       certId: ${env:SSL_CERT_ID}
-    #     cache:
-    #       - type: suffix
-    #         rule: .js,.css,.jpg,.png,.svg,.woff,.woff2
-    #         time: 2592000
-    #       - type: suffix
-    #         rule: .html
-    #         time: 0
-
-# ============================================
-# 异步任务 Worker - SCF 事件函数
-# ============================================
-worker:
-  component: scf
-  name: ppt-rsd-worker
-  inputs:
-    name: ppt-rsd-worker-${stage}
-    # 事件函数类型
-    type: event
-    runtime: Python3.9
-    region: ${env:REGION, 'ap-guangzhou'}
-    src:
-      src: ../../workers
-      exclude:
-        - .git/**
-        - __pycache__/**
-        - "*.pyc"
-    # 入口函数
-    handler: index.main_handler
-    memorySize: 1024
-    timeout: 900  # 15分钟，用于处理大文件
-    environment:
-      variables:
-        STAGE: ${stage}
-        DATABASE_URL: ${env:DATABASE_URL}
-        REDIS_URL: ${env:REDIS_URL}
-        COS_BUCKET: ${env:COS_BUCKET}
-        COS_REGION: ${env:COS_REGION}
-        COS_SECRET_ID: ${env:COS_SECRET_ID}
-        COS_SECRET_KEY: ${env:COS_SECRET_KEY}
-    vpcConfig:
-      vpcId: ${env:VPC_ID, ''}
-      subnetId: ${env:SUBNET_ID, ''}
-    # COS 触发器 - 当有新文件上传时触发
-    events:
-      - cos:
-          parameters:
-            bucket: ${env:COS_BUCKET}
-            filter:
-              prefix: uploads/
-              suffix: .pptx
-            events: cos:ObjectCreated:*
-            enable: true
+inputs:
+  name: ppt-rsd-backend-${stage}
+  # Web 函数类型
+  type: web
+  # 运行环境
+  runtime: Python3.9
+  # 地域
+  region: ${env:REGION, 'ap-guangzhou'}
+  # 源代码
+  src:
+    src: ../../backend
+    exclude:
+      - .git/**
+      - .gitignore
+      - __pycache__/**
+      - "*.pyc"
+      - .env
+      - .env.*
+      - tests/**
+      - "*.md"
+  # Web 函数启动文件
+  entryFile: scf_bootstrap
+  # 内存配置 (MB)
+  memorySize: 512
+  # 超时时间 (秒)
+  timeout: 30
+  # 环境变量
+  environment:
+    variables:
+      STAGE: ${stage}
+      DEBUG: "false"
+      SECRET_KEY: ${env:SECRET_KEY, 'change-me-in-production'}
+  # API 网关触发器
+  events:
+    - apigw:
+        parameters:
+          serviceName: ppt-rsd-api-${stage}
+          description: PPT-RSD Backend API
+          protocols:
+            - https
+            - http
+          environment: release
+          endpoints:
+            - path: /
+              method: ANY
+              enableCORS: true
+            - path: /{proxy+}
+              method: ANY
+              enableCORS: true
