@@ -31,7 +31,7 @@ export interface OutlineChapter {
 
 // 智能生成请求
 export interface SmartGenerateRequest {
-  description: string;            // 用户输入的描述文字（100-2000字）
+  description: string;            // 用户输入的描述文字（10-2000字）
   style_preference?: string;      // 风格偏好（可选）
 }
 

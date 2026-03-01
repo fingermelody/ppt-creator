@@ -2,8 +2,10 @@
 FastAPI 主应用入口
 """
 
-from fastapi import FastAPI
+import traceback
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from mangum import Mangum
 
@@ -16,7 +18,12 @@ from app.db import Base, engine
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时创建数据库表
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("Database tables created successfully")
+    except Exception as e:
+        print(f"Error creating database tables: {e}")
+        traceback.print_exc()
     yield
     # 关闭时的清理工作
 
@@ -27,10 +34,20 @@ def create_app() -> FastAPI:
         title=settings.APP_NAME,
         version=settings.APP_VERSION,
         description="PPT 智能生成与文档库管理系统 API",
-        docs_url="/docs" if settings.DEBUG else None,
-        redoc_url="/redoc" if settings.DEBUG else None,
+        docs_url="/docs",
+        redoc_url="/redoc",
         lifespan=lifespan,
     )
+    
+    # 全局异常处理
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        error_detail = traceback.format_exc()
+        print(f"Global error: {error_detail}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(exc), "traceback": error_detail},
+        )
     
     # 配置 CORS
     app.add_middleware(

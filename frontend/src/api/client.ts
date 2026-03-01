@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { MessagePlugin } from 'tdesign-react';
 
+// API 基础地址：优先使用环境变量，开发环境默认 localhost
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 class ApiClient {
@@ -43,9 +44,8 @@ class ApiClient {
           const { status, data } = error.response;
           switch (status) {
             case 401:
-              MessagePlugin.error('登录已过期，请重新登录');
-              localStorage.removeItem('token');
-              window.location.href = '/login';
+              // 401 错误不跳转，只提示（演示模式）
+              console.warn('认证信息无效，使用匿名模式');
               break;
             case 403:
               MessagePlugin.error('没有权限访问此资源');

@@ -22,6 +22,81 @@ import type {
 } from '../types/outline';
 
 // ============================================
+// 数据转换工具函数
+// ============================================
+
+interface BackendSection {
+  id: string;
+  title: string;
+  description?: string;
+  expected_pages?: number;
+  order_index?: number;
+  content_hint?: string;
+}
+
+interface BackendOutline {
+  id: string;
+  title: string;
+  description?: string;
+  generation_mode?: string;
+  status?: string;
+  section_count?: number;
+  sections?: BackendSection[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+// 转换后端 section 为前端 chapter
+function convertSectionToChapter(section: BackendSection, index: number): OutlineChapter {
+  return {
+    id: section.id,
+    title: section.title,
+    summary: section.description || '',
+    page_count: section.expected_pages || 1,
+    order: section.order_index !== undefined ? section.order_index + 1 : index + 1,
+    keywords: [],
+  };
+}
+
+// 转换后端大纲为前端格式
+function convertBackendOutline(backend: BackendOutline): PPTOutline {
+  const chapters = (backend.sections || []).map((s, i) => convertSectionToChapter(s, i));
+  const totalPages = chapters.reduce((sum, ch) => sum + ch.page_count, 0);
+  
+  return {
+    id: backend.id,
+    title: backend.title || '未命名大纲',
+    objective: backend.description || '',
+    chapters,
+    generation_type: backend.generation_mode === 'wizard' ? 'wizard' : 'smart',
+    status: backend.status === 'completed' ? 'confirmed' : 
+            backend.status === 'draft' ? 'draft' : 'draft',
+    total_pages: totalPages || backend.section_count || 0,
+    created_at: backend.created_at || new Date().toISOString(),
+    updated_at: backend.updated_at || new Date().toISOString(),
+    user_id: '',
+  };
+}
+
+// 转换后端大纲列表项为前端格式（简化版，没有完整 sections）
+function convertBackendOutlineListItem(backend: BackendOutline): PPTOutline {
+  // 列表项没有 sections，创建空数组
+  return {
+    id: backend.id,
+    title: backend.title || '未命名大纲',
+    objective: backend.description || '',
+    chapters: [],
+    generation_type: backend.generation_mode === 'wizard' ? 'wizard' : 'smart',
+    status: backend.status === 'completed' ? 'confirmed' : 
+            backend.status === 'draft' ? 'draft' : 'draft',
+    total_pages: backend.section_count || 0,
+    created_at: backend.created_at || new Date().toISOString(),
+    updated_at: backend.updated_at || new Date().toISOString(),
+    user_id: '',
+  };
+}
+
+// ============================================
 // 智能生成
 // ============================================
 
@@ -31,8 +106,13 @@ import type {
 export const smartGenerate = async (
   data: SmartGenerateRequest
 ): Promise<SmartGenerateResponse> => {
-  const response = await client.post('/api/outlines/smart-generate', data);
-  return response.data;
+  // client.post 已经返回 response.data，所以直接使用返回值
+  const backendResponse = await client.post('/api/outlines/smart-generate', data);
+  return {
+    outline: convertBackendOutline(backendResponse.outline),
+    confidence: backendResponse.confidence || 0.85,
+    suggestions: backendResponse.suggestions || [],
+  };
 };
 
 // ============================================
@@ -43,8 +123,7 @@ export const smartGenerate = async (
  * 创建向导会话
  */
 export const createWizardSession = async (): Promise<CreateSessionResponse> => {
-  const response = await client.post('/api/outlines/wizard/sessions');
-  return response.data;
+  return await client.post('/api/outlines/wizard/sessions');
 };
 
 /**
@@ -53,8 +132,7 @@ export const createWizardSession = async (): Promise<CreateSessionResponse> => {
 export const getWizardSession = async (
   sessionId: string
 ): Promise<WizardSession> => {
-  const response = await client.get(`/api/outlines/wizard/sessions/${sessionId}`);
-  return response.data;
+  return await client.get(`/api/outlines/wizard/sessions/${sessionId}`);
 };
 
 /**
@@ -64,11 +142,10 @@ export const saveWizardStep1 = async (
   sessionId: string,
   data: WizardStep1Data
 ): Promise<SaveStepResponse> => {
-  const response = await client.put(
+  return await client.put(
     `/api/outlines/wizard/sessions/${sessionId}/step1`,
     data
   );
-  return response.data;
 };
 
 /**
@@ -78,11 +155,10 @@ export const saveWizardStep2 = async (
   sessionId: string,
   data: WizardStep2Data
 ): Promise<SaveStepResponse> => {
-  const response = await client.put(
+  return await client.put(
     `/api/outlines/wizard/sessions/${sessionId}/step2`,
     data
   );
-  return response.data;
 };
 
 /**
@@ -92,11 +168,10 @@ export const saveWizardStep3 = async (
   sessionId: string,
   data: WizardStep3Data
 ): Promise<SaveStepResponse> => {
-  const response = await client.put(
+  return await client.put(
     `/api/outlines/wizard/sessions/${sessionId}/step3`,
     data
   );
-  return response.data;
 };
 
 /**
@@ -106,11 +181,10 @@ export const saveWizardStep4 = async (
   sessionId: string,
   data: WizardStep4Data
 ): Promise<SaveStepResponse> => {
-  const response = await client.put(
+  return await client.put(
     `/api/outlines/wizard/sessions/${sessionId}/step4`,
     data
   );
-  return response.data;
 };
 
 /**
@@ -119,10 +193,9 @@ export const saveWizardStep4 = async (
 export const completeWizard = async (
   sessionId: string
 ): Promise<CompleteWizardResponse> => {
-  const response = await client.post(
+  return await client.post(
     `/api/outlines/wizard/sessions/${sessionId}/complete`
   );
-  return response.data;
 };
 
 /**
@@ -132,11 +205,10 @@ export const getAISuggestion = async (
   chapterTitle: string,
   pptObjective: string
 ): Promise<AISuggestionResponse> => {
-  const response = await client.post('/api/outlines/wizard/ai-suggestion', {
+  return await client.post('/api/outlines/wizard/ai-suggestion', {
     chapter_title: chapterTitle,
     ppt_objective: pptObjective,
   });
-  return response.data;
 };
 
 // ============================================
@@ -145,13 +217,20 @@ export const getAISuggestion = async (
 
 /**
  * 获取大纲模板列表
+ * 注意：模板API在 /api/v1/generation/templates
  */
 export const getTemplates = async (
   category?: string
 ): Promise<TemplateListResponse> => {
   const params = category ? { category } : {};
-  const response = await client.get('/api/outlines/templates', { params });
-  return response.data;
+  try {
+    const data = await client.get('/api/v1/generation/templates', { params });
+    return data || { templates: [], total: 0, categories: [] };
+  } catch (error) {
+    // 模板加载失败时返回空数组，不影响主流程
+    console.warn('Failed to load templates:', error);
+    return { templates: [], total: 0, categories: [] };
+  }
 };
 
 /**
@@ -161,11 +240,10 @@ export const applyTemplate = async (
   templateId: string,
   data?: { title?: string; objective?: string }
 ): Promise<ApplyTemplateResponse> => {
-  const response = await client.post(
+  return await client.post(
     `/api/outlines/templates/${templateId}/apply`,
     data || {}
   );
-  return response.data;
 };
 
 // ============================================
@@ -180,16 +258,19 @@ export const getOutlines = async (params?: {
   page?: number;
   limit?: number;
 }): Promise<OutlineListResponse> => {
-  const response = await client.get('/api/outlines', { params });
-  return response.data;
+  const data = await client.get<{ outlines: BackendOutline[]; total: number }>('/api/outlines', { params });
+  return {
+    outlines: (data.outlines || []).map(convertBackendOutlineListItem),
+    total: data.total || 0,
+  };
 };
 
 /**
  * 获取大纲详情
  */
 export const getOutlineDetail = async (outlineId: string): Promise<PPTOutline> => {
-  const response = await client.get(`/api/outlines/${outlineId}`);
-  return response.data;
+  const data = await client.get<BackendOutline>(`/api/outlines/${outlineId}`);
+  return convertBackendOutline(data);
 };
 
 /**
@@ -199,8 +280,7 @@ export const updateOutline = async (
   outlineId: string,
   data: Partial<PPTOutline>
 ): Promise<{ success: boolean; updated_at: string }> => {
-  const response = await client.put(`/api/outlines/${outlineId}`, data);
-  return response.data;
+  return await client.put(`/api/outlines/${outlineId}`, data);
 };
 
 /**
@@ -211,11 +291,10 @@ export const updateChapter = async (
   chapterId: string,
   data: Partial<OutlineChapter>
 ): Promise<{ success: boolean; chapter: OutlineChapter }> => {
-  const response = await client.put(
+  return await client.put(
     `/api/outlines/${outlineId}/chapters/${chapterId}`,
     data
   );
-  return response.data;
 };
 
 /**
@@ -231,11 +310,10 @@ export const addChapter = async (
     order?: number;
   }
 ): Promise<{ chapter: OutlineChapter }> => {
-  const response = await client.post(
+  return await client.post(
     `/api/outlines/${outlineId}/chapters`,
     data
   );
-  return response.data;
 };
 
 /**
@@ -245,10 +323,9 @@ export const deleteChapter = async (
   outlineId: string,
   chapterId: string
 ): Promise<{ success: boolean }> => {
-  const response = await client.delete(
+  return await client.delete(
     `/api/outlines/${outlineId}/chapters/${chapterId}`
   );
-  return response.data;
 };
 
 /**
@@ -258,11 +335,10 @@ export const reorderChapters = async (
   outlineId: string,
   chapterOrders: { chapter_id: string; order: number }[]
 ): Promise<{ success: boolean }> => {
-  const response = await client.put(
+  return await client.put(
     `/api/outlines/${outlineId}/chapters/reorder`,
     { chapter_orders: chapterOrders }
   );
-  return response.data;
 };
 
 /**
@@ -271,8 +347,7 @@ export const reorderChapters = async (
 export const confirmOutline = async (
   outlineId: string
 ): Promise<ConfirmOutlineResponse> => {
-  const response = await client.post(`/api/outlines/${outlineId}/confirm`);
-  return response.data;
+  return await client.post(`/api/outlines/${outlineId}/confirm`);
 };
 
 /**
@@ -281,8 +356,7 @@ export const confirmOutline = async (
 export const deleteOutline = async (
   outlineId: string
 ): Promise<{ success: boolean }> => {
-  const response = await client.delete(`/api/outlines/${outlineId}`);
-  return response.data;
+  return await client.delete(`/api/outlines/${outlineId}`);
 };
 
 /**
@@ -296,11 +370,10 @@ export const autoSaveOutline = async (
     chapters: OutlineChapter[];
   }
 ): Promise<{ success: boolean; saved_at: string }> => {
-  const response = await client.post(
+  return await client.post(
     `/api/outlines/${outlineId}/auto-save`,
     data
   );
-  return response.data;
 };
 
 export default {

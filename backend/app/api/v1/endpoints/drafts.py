@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.core import get_current_user_id
 from app.models import Draft, DraftPage, DraftStatus, Slide, Document
+from app.models.outline import OutlineSection
 from app.schemas import (
     DraftCreate,
     DraftUpdate,
@@ -84,7 +85,7 @@ async def get_draft(
     user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
-    """获取草稿详情，包含所有页面"""
+    """获取草稿详情，包含所有页面和关联的章节信息"""
     draft = db.query(Draft).filter(
         Draft.id == draft_id,
         Draft.owner_id == user_id,
@@ -103,6 +104,26 @@ async def get_draft(
     
     response = DraftDetailResponse.model_validate(draft)
     response.pages = [DraftPageResponse.model_validate(p) for p in pages]
+    
+    # 如果草稿关联了大纲，获取章节信息
+    if draft.outline_id:
+        sections = db.query(OutlineSection).filter(
+            OutlineSection.outline_id == draft.outline_id
+        ).order_by(OutlineSection.order_index).all()
+        
+        # 构建章节信息映射
+        sections_data = []
+        for section in sections:
+            sections_data.append({
+                "id": section.id,
+                "title": section.title,
+                "description": section.description,
+                "expected_pages": section.expected_pages,
+                "order_index": section.order_index
+            })
+        
+        # 将章节信息添加到响应中
+        response.sections = sections_data
     
     return response
 
@@ -363,7 +384,11 @@ async def export_draft(
     user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
-    """导出草稿为 PPTX 或 PDF 文件"""
+    """导出草稿为 PPTX 文件"""
+    from datetime import datetime
+    from app.services.ppt_export import ppt_export_service
+    import os
+    
     draft = db.query(Draft).filter(
         Draft.id == draft_id,
         Draft.owner_id == user_id,
@@ -376,12 +401,116 @@ async def export_draft(
             detail="草稿不存在"
         )
     
-    # TODO: 实现导出逻辑
-    from datetime import datetime
+    # 获取草稿页面
+    pages = db.query(DraftPage).filter(
+        DraftPage.draft_id == draft_id
+    ).order_by(DraftPage.order_index).all()
     
-    return DraftExportResponse(
-        download_url=f"/api/downloads/{draft_id}.{request.format}",
-        file_size=0,
-        file_name=f"{draft.title}.{request.format}",
-        exported_at=datetime.utcnow()
+    # 获取章节信息
+    chapters_data = []
+    if draft.outline_id:
+        sections = db.query(OutlineSection).filter(
+            OutlineSection.outline_id == draft.outline_id
+        ).order_by(OutlineSection.order_index).all()
+        
+        # 按章节分组页面
+        section_pages = {}
+        for page in pages:
+            sid = page.section_id or 'unassigned'
+            if sid not in section_pages:
+                section_pages[sid] = []
+            section_pages[sid].append(page)
+        
+        for section in sections:
+            chapter_pages = section_pages.get(section.id, [])
+            chapters_data.append({
+                'title': section.title,
+                'description': section.description or '',
+                'pages': [
+                    {
+                        'title': p.title or section.title,
+                        'content_summary': p.title or ''
+                    }
+                    for p in chapter_pages
+                ]
+            })
+    else:
+        # 没有关联大纲，创建默认章节
+        chapters_data.append({
+            'title': draft.title,
+            'description': draft.description or '',
+            'pages': [
+                {
+                    'title': p.title or f'页面 {i+1}',
+                    'content_summary': p.title or ''
+                }
+                for i, p in enumerate(pages)
+            ]
+        })
+    
+    # 生成 PPT
+    try:
+        filepath = ppt_export_service.create_ppt(
+            title=draft.title,
+            chapters=chapters_data,
+            description=draft.description
+        )
+        
+        # 获取文件大小
+        file_size = os.path.getsize(filepath)
+        filename = os.path.basename(filepath)
+        
+        # 更新草稿状态
+        draft.exported_file_path = filepath
+        draft.status = DraftStatus.COMPLETED
+        db.commit()
+        
+        return DraftExportResponse(
+            download_url=f"/api/drafts/{draft_id}/download/{filename}",
+            file_size=file_size,
+            file_name=f"{draft.title}.pptx",
+            exported_at=datetime.utcnow()
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"导出失败: {str(e)}"
+        )
+
+
+@router.get("/{draft_id}/download/{filename}", summary="下载导出的文件")
+async def download_export(
+    draft_id: str,
+    filename: str,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """下载导出的 PPT 文件"""
+    from fastapi.responses import FileResponse
+    import os
+    
+    draft = db.query(Draft).filter(
+        Draft.id == draft_id,
+        Draft.owner_id == user_id,
+        Draft.is_deleted == False
+    ).first()
+    
+    if not draft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="草稿不存在"
+        )
+    
+    filepath = f"./data/exports/{filename}"
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文件不存在"
+        )
+    
+    return FileResponse(
+        path=filepath,
+        filename=f"{draft.title}.pptx",
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
     )

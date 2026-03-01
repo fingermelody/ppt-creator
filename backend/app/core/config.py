@@ -24,12 +24,17 @@ class Settings(BaseSettings):
     WORKERS: int = 4
     
     # ============== CORS 配置 ==============
-    CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://ppt.bottlepeace.com",
+        "https://ai-generator-1gp9p3g64d04e869-1253851367.tcloudbaseapp.com",
+    ]
     
     # ============== 数据库配置 ==============
     DATABASE_URL: str = Field(
-        default="postgresql://postgres:postgres@localhost:5432/ppt_rsd",
-        description="PostgreSQL 连接字符串"
+        default="sqlite:///./data/ppt_generator.db",
+        description="数据库连接字符串"
     )
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20

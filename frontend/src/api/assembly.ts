@@ -10,152 +10,324 @@ import {
   ReplacePageResponse,
   OperationHistory,
 } from '../types/assembly';
+import type { PPTOutline } from '../types/outline';
+
+// 后端草稿页面响应类型
+interface BackendDraftPage {
+  id: string;
+  draft_id: string;
+  title?: string;
+  order_index: number;
+  source_slide_id?: string;
+  section_id?: string;
+  thumbnail_path?: string;
+  is_modified: number;
+  created_at: string;
+}
+
+// 后端章节信息（来自大纲）
+interface BackendSectionInfo {
+  id: string;
+  title: string;
+  description?: string;
+  expected_pages?: number;
+  order_index: number;
+}
+
+// 后端草稿详情响应类型
+interface BackendDraftDetail {
+  id: string;
+  title: string;
+  description?: string;
+  outline_id?: string;
+  status: string;
+  page_count: number;
+  pages: BackendDraftPage[];
+  sections?: BackendSectionInfo[];  // 关联大纲的章节信息
+  created_at: string;
+  updated_at: string;
+}
+
+// 转换后端数据为前端格式
+function convertBackendDraftToFrontend(backendDraft: BackendDraftDetail): DraftDetail {
+  // 构建章节ID到章节信息的映射
+  const sectionInfoMap = new Map<string, BackendSectionInfo>();
+  if (backendDraft.sections) {
+    backendDraft.sections.forEach(section => {
+      sectionInfoMap.set(section.id, section);
+    });
+  }
+
+  // 按 section_id 分组页面
+  const sectionMap = new Map<string, BackendDraftPage[]>();
+  const unassignedPages: BackendDraftPage[] = [];
+
+  backendDraft.pages.forEach(page => {
+    if (page.section_id) {
+      const existing = sectionMap.get(page.section_id) || [];
+      existing.push(page);
+      sectionMap.set(page.section_id, existing);
+    } else {
+      unassignedPages.push(page);
+    }
+  });
+
+  // 构建章节列表
+  const chapters: Chapter[] = [];
+  
+  if (sectionMap.size === 0 && unassignedPages.length > 0) {
+    // 所有页面放在一个默认章节
+    chapters.push({
+      id: 'default-chapter',
+      title: backendDraft.title || '默认章节',
+      description: backendDraft.description || '',
+      required_pages: unassignedPages.length,
+      page_count: unassignedPages.length,
+      pages: unassignedPages.map((page, index) => ({
+        slide_id: page.id,
+        document_id: page.source_slide_id || '',
+        document_title: page.title || `页面 ${index + 1}`,
+        page_number: page.order_index + 1,
+        thumbnail: page.thumbnail_path || '',
+        similarity: 1,
+        content_summary: page.title || '',
+        order: page.order_index,
+      })),
+      created_at: backendDraft.created_at,
+      updated_at: backendDraft.updated_at,
+    });
+  } else if (sectionMap.size > 0) {
+    // 按章节信息的 order_index 排序
+    const sortedSectionIds = Array.from(sectionMap.keys()).sort((a, b) => {
+      const sectionA = sectionInfoMap.get(a);
+      const sectionB = sectionInfoMap.get(b);
+      return (sectionA?.order_index || 0) - (sectionB?.order_index || 0);
+    });
+
+    sortedSectionIds.forEach((sectionId) => {
+      const pages = sectionMap.get(sectionId) || [];
+      const sectionInfo = sectionInfoMap.get(sectionId);
+      
+      chapters.push({
+        id: sectionId,
+        title: sectionInfo?.title || `章节`,
+        description: sectionInfo?.description || '',
+        required_pages: sectionInfo?.expected_pages || pages.length,
+        page_count: pages.length,
+        pages: pages.map((page, index) => ({
+          slide_id: page.id,
+          document_id: page.source_slide_id || '',
+          document_title: page.title || `页面 ${index + 1}`,
+          page_number: page.order_index + 1,
+          thumbnail: page.thumbnail_path || '',
+          similarity: 1,
+          content_summary: page.title || '',
+          order: page.order_index,
+        })),
+        created_at: backendDraft.created_at,
+        updated_at: backendDraft.updated_at,
+      });
+    });
+
+    // 未分配的页面放入"其他"章节
+    if (unassignedPages.length > 0) {
+      chapters.push({
+        id: 'other-chapter',
+        title: '其他页面',
+        description: '',
+        required_pages: unassignedPages.length,
+        page_count: unassignedPages.length,
+        pages: unassignedPages.map((page, index) => ({
+          slide_id: page.id,
+          document_id: page.source_slide_id || '',
+          document_title: page.title || `页面 ${index + 1}`,
+          page_number: page.order_index + 1,
+          thumbnail: page.thumbnail_path || '',
+          similarity: 1,
+          content_summary: page.title || '',
+          order: page.order_index,
+        })),
+        created_at: backendDraft.created_at,
+        updated_at: backendDraft.updated_at,
+      });
+    }
+  } else if (backendDraft.sections && backendDraft.sections.length > 0) {
+    // 有章节信息但没有页面，创建空章节
+    backendDraft.sections
+      .sort((a, b) => a.order_index - b.order_index)
+      .forEach(section => {
+        chapters.push({
+          id: section.id,
+          title: section.title,
+          description: section.description || '',
+          required_pages: section.expected_pages || 1,
+          page_count: 0,
+          pages: [],
+          created_at: backendDraft.created_at,
+          updated_at: backendDraft.updated_at,
+        });
+      });
+  }
+
+  const draft: AssemblyDraft = {
+    id: backendDraft.id,
+    title: backendDraft.title,
+    description: backendDraft.description,
+    chapters,
+    total_pages: backendDraft.page_count,
+    status: backendDraft.status === 'assembling' ? 'draft' : 
+            backendDraft.status === 'generating' ? 'generating' : 'completed',
+    created_at: backendDraft.created_at,
+    updated_at: backendDraft.updated_at,
+    version: 1,
+  };
+
+  return {
+    draft,
+    can_undo: false,
+    can_redo: false,
+  };
+}
 
 export const assemblyApi = {
   // 创建组装任务
   createDraft: async (title: string, description?: string) => {
-    return apiClient.post<{ draft_id: string; created_at: string }>('/api/assembly/drafts', {
+    const response = await apiClient.post<BackendDraftDetail>('/api/drafts', {
       title,
       description,
     });
+    return { draft_id: response.id, created_at: response.created_at };
+  },
+
+  // 基于大纲创建草稿（注意：这个是通过确认大纲自动创建的，这里用于兼容）
+  createDraftFromOutline: async (outline: PPTOutline) => {
+    const response = await apiClient.post<BackendDraftDetail>(
+      '/api/drafts',
+      { 
+        title: outline.title, 
+        description: outline.objective,
+        outline_id: outline.id 
+      }
+    );
+    const converted = convertBackendDraftToFrontend(response);
+    return { 
+      draft_id: response.id, 
+      message: '草稿创建成功', 
+      draft: converted.draft 
+    };
   },
 
   // 获取草稿列表
   getDrafts: async (page = 1, limit = 20, status?: string) => {
-    return apiClient.get<DraftListResponse>('/api/assembly/drafts', {
+    const response = await apiClient.get<{ drafts: BackendDraftDetail[], total: number }>('/api/drafts', {
       params: { page, limit, status },
     });
+    return {
+      drafts: response.drafts.map(d => convertBackendDraftToFrontend(d).draft),
+      total: response.total,
+    } as DraftListResponse;
   },
 
   // 获取草稿详情
   getDraftDetail: async (draftId: string) => {
-    return apiClient.get<DraftDetail>(`/api/assembly/drafts/${draftId}`);
+    const response = await apiClient.get<BackendDraftDetail>(`/api/drafts/${draftId}`);
+    return convertBackendDraftToFrontend(response);
   },
 
   // 保存草稿
   saveDraft: async (draftId: string, title?: string) => {
-    return apiClient.post<{ success: boolean; saved_at: string }>(
-      `/api/assembly/drafts/${draftId}/save`,
+    const response = await apiClient.put<BackendDraftDetail>(
+      `/api/drafts/${draftId}`,
       { title }
     );
+    return { success: true, saved_at: response.updated_at };
   },
 
   // 删除草稿
   deleteDraft: async (draftId: string) => {
-    return apiClient.delete<{ success: boolean }>(`/api/assembly/drafts/${draftId}`);
+    return apiClient.delete<{ success: boolean }>(`/api/drafts/${draftId}`);
   },
 
   // 导出PPT
   exportPPT: async (draftId: string, filename?: string) => {
-    return apiClient.post<{ download_url: string; file_size: number; page_count: number }>(
-      `/api/assembly/drafts/${draftId}/export`,
-      { filename }
+    return apiClient.post<{ download_url: string; file_size: number; file_name: string; exported_at: string }>(
+      `/api/drafts/${draftId}/export`,
+      { filename, format: 'pptx' }
     );
   },
 
-  // 添加章节
-  addChapter: async (draftId: string, chapter: Omit<Chapter, 'id' | 'page_count' | 'pages' | 'created_at' | 'updated_at'>) => {
-    return apiClient.post<{ chapter_id: string; generated_pages: ChapterPage[]; total_pages: number }>(
-      `/api/assembly/drafts/${draftId}/chapters`,
-      chapter
-    );
-  },
-
-  // 更新章节
-  updateChapter: async (
-    draftId: string,
-    chapterId: string,
-    chapter: Partial<Omit<Chapter, 'id' | 'page_count' | 'pages' | 'created_at' | 'updated_at'>>
-  ) => {
-    return apiClient.put<{ chapter_id: string; generated_pages: ChapterPage[] }>(
-      `/api/assembly/drafts/${draftId}/chapters/${chapterId}`,
-      chapter
-    );
-  },
-
-  // 删除章节
-  deleteChapter: async (draftId: string, chapterId: string) => {
-    return apiClient.delete<{ success: boolean }>(
-      `/api/assembly/drafts/${draftId}/chapters/${chapterId}`
-    );
-  },
-
-  // 重新生成章节
-  regenerateChapter: async (draftId: string, chapterId: string) => {
-    return apiClient.post<{ chapter_id: string; generated_pages: ChapterPage[] }>(
-      `/api/assembly/drafts/${draftId}/chapters/${chapterId}/regenerate`
-    );
-  },
-
-  // 获取备选页面
-  getAlternatives: async (draftId: string, chapterId: string, slideId: string, limit = 5) => {
-    return apiClient.get<AlternativeResponse>(
-      `/api/assembly/drafts/${draftId}/chapters/${chapterId}/pages/${slideId}/alternatives`,
-      { params: { limit } }
-    );
-  },
-
-  // 替换页面
-  replacePage: async (draftId: string, chapterId: string, oldSlideId: string, request: ReplacePageRequest) => {
-    return apiClient.put<ReplacePageResponse>(
-      `/api/assembly/drafts/${draftId}/chapters/${chapterId}/pages/${oldSlideId}/replace`,
-      request
-    );
-  },
-
-  // 删除页面
-  deletePage: async (draftId: string, chapterId: string, slideId: string) => {
-    return apiClient.delete<{ success: boolean }>(
-      `/api/assembly/drafts/${draftId}/chapters/${chapterId}/pages/${slideId}`
-    );
-  },
-
-  // 添加页面
-  addPage: async (draftId: string, chapterId: string, slideId: string, order: number) => {
+  // 添加页面（使用草稿 API）
+  addPage: async (draftId: string, _chapterId: string, slideId: string, order: number) => {
     return apiClient.post<{ success: boolean; page: ChapterPage }>(
-      `/api/assembly/drafts/${draftId}/chapters/${chapterId}/pages`,
-      { slide_id: slideId, order }
+      `/api/drafts/${draftId}/pages`,
+      { slide_id: slideId, position: order }
     );
   },
 
   // 调整页面顺序
-  reorderPages: async (draftId: string, chapterId: string, pageOrders: { slide_id: string; order: number }[]) => {
-    return apiClient.put<{ success: boolean }>(
-      `/api/assembly/drafts/${draftId}/chapters/${chapterId}/pages/reorder`,
-      { page_orders: pageOrders }
+  reorderPages: async (draftId: string, _chapterId: string, pageOrders: { slide_id: string; order: number }[]) => {
+    return apiClient.post<{ success: boolean }>(
+      `/api/drafts/${draftId}/pages/reorder`,
+      { page_orders: pageOrders.map(p => ({ page_id: p.slide_id, order_index: p.order })) }
     );
   },
 
-  // 跨章节移动页面
-  movePage: async (
-    draftId: string,
-    slideId: string,
-    targetChapterId: string,
-    targetOrder: number
-  ) => {
-    return apiClient.put<{ success: boolean }>(`/api/assembly/drafts/${draftId}/pages/${slideId}/move`, {
-      target_chapter_id: targetChapterId,
-      target_order: targetOrder,
-    });
-  },
-
-  // 撤销操作
-  undo: async (draftId: string) => {
-    return apiClient.post<{ success: boolean; draft: AssemblyDraft; operation: string }>(
-      `/api/assembly/drafts/${draftId}/undo`
+  // 删除页面
+  deletePage: async (draftId: string, _chapterId: string, pageId: string) => {
+    return apiClient.delete<{ success: boolean }>(
+      `/api/drafts/${draftId}/pages/${pageId}`
     );
   },
 
-  // 重做操作
-  redo: async (draftId: string) => {
-    return apiClient.post<{ success: boolean; draft: AssemblyDraft; operation: string }>(
-      `/api/assembly/drafts/${draftId}/redo`
-    );
+  // 以下 API 后端暂未实现，先保留占位
+  addChapter: async (_draftId: string, _chapter: Omit<Chapter, 'id' | 'page_count' | 'pages' | 'created_at' | 'updated_at'>) => {
+    console.warn('addChapter API not implemented in backend');
+    return { chapter_id: '', generated_pages: [], total_pages: 0 };
   },
 
-  // 获取操作历史
-  getHistory: async (draftId: string) => {
-    return apiClient.get<OperationHistory>(`/api/assembly/drafts/${draftId}/history`);
+  updateChapter: async (_draftId: string, _chapterId: string, _chapter: Partial<Omit<Chapter, 'id' | 'page_count' | 'pages' | 'created_at' | 'updated_at'>>) => {
+    console.warn('updateChapter API not implemented in backend');
+    return { chapter_id: '', generated_pages: [] };
+  },
+
+  deleteChapter: async (_draftId: string, _chapterId: string) => {
+    console.warn('deleteChapter API not implemented in backend');
+    return { success: true };
+  },
+
+  regenerateChapter: async (_draftId: string, _chapterId: string) => {
+    console.warn('regenerateChapter API not implemented in backend');
+    return { chapter_id: '', generated_pages: [] };
+  },
+
+  getAlternatives: async (_draftId: string, _chapterId: string, _slideId: string, _limit = 5) => {
+    console.warn('getAlternatives API not implemented in backend');
+    return { alternatives: [], total: 0 };
+  },
+
+  replacePage: async (_draftId: string, _chapterId: string, _oldSlideId: string, _request: ReplacePageRequest) => {
+    console.warn('replacePage API not implemented in backend');
+    return { success: true, new_page: null };
+  },
+
+  movePage: async (_draftId: string, _slideId: string, _targetChapterId: string, _targetOrder: number) => {
+    console.warn('movePage API not implemented in backend');
+    return { success: true };
+  },
+
+  undo: async (_draftId: string) => {
+    console.warn('undo API not implemented in backend');
+    return { success: false, draft: null as any, operation: '' };
+  },
+
+  redo: async (_draftId: string) => {
+    console.warn('redo API not implemented in backend');
+    return { success: false, draft: null as any, operation: '' };
+  },
+
+  getHistory: async (_draftId: string) => {
+    console.warn('getHistory API not implemented in backend');
+    return { operations: [] };
   },
 };
 

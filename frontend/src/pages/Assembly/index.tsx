@@ -12,10 +12,11 @@ import {
   Loading,
   Empty,
   MessagePlugin,
+  DialogPlugin,
 } from 'tdesign-react';
 import { AddIcon, RollbackIcon, RollfrontIcon, DownloadIcon, ViewListIcon } from 'tdesign-icons-react';
-import assemblyApi from '../../api/assembly.mock';
-import outlineApi from '../../api/outline.mock';
+import assemblyApi from '../../api/assembly';
+import outlineApi from '../../api/outline';
 import { AssemblyDraft } from '../../types/assembly';
 import { PPTOutline } from '../../types/outline';
 import { useAssemblyStore } from '../../stores/assemblyStore';
@@ -146,18 +147,31 @@ export default function Assembly() {
   const handleExport = async () => {
     if (!draftId) return;
 
-    const dialog = Dialog.confirm({
+    const confirmDialog = DialogPlugin.confirm({
       header: '导出PPT',
       body: '确定要导出当前PPT吗？',
       onConfirm: async () => {
         try {
+          MessagePlugin.info('正在生成PPT文件...');
           const response = await assemblyApi.exportPPT(draftId);
-          window.open(response.download_url, '_blank');
-          dialog.destroy();
-          MessagePlugin.success('导出成功');
+          
+          // 构建完整的下载 URL
+          const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+          const downloadUrl = apiBase + response.download_url;
+          
+          // 创建下载链接并触发下载
+          const link = document.createElement('a');
+          link.href = downloadUrl;
+          link.download = response.file_name || 'presentation.pptx';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          confirmDialog.destroy();
+          MessagePlugin.success('导出成功，文件正在下载');
         } catch (error) {
           console.error('Export failed:', error);
-          MessagePlugin.error('导出失败');
+          MessagePlugin.error('导出失败，请重试');
         }
       },
     });

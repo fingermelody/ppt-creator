@@ -21,7 +21,7 @@ import {
   ChevronRightIcon,
   CheckCircleIcon,
 } from 'tdesign-icons-react';
-import outlineApi from '../../../api/outline.mock';
+import outlineApi from '../../../api/outline';
 import { useOutlineStore } from '../../../stores/outlineStore';
 import type {
   PPTOutline,

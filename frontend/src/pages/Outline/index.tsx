@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -12,7 +12,7 @@ import {
   Empty,
 } from 'tdesign-react';
 import { CheckCircleIcon, AddIcon } from 'tdesign-icons-react';
-import outlineApi from '../../api/outline.mock';
+import outlineApi from '../../api/outline';
 import { useOutlineStore } from '../../stores/outlineStore';
 import type { PPTOutline, OutlineTemplate } from '../../types/outline';
 import SmartGenerate from './components/SmartGenerate';
@@ -82,6 +82,32 @@ export default function Outline() {
     setCurrentOutline(outline);
     setOutlines([outline, ...outlines.filter(o => o.id !== outline.id)]);
   };
+
+  // 自动保存大纲（防抖）
+  const autoSaveTimeout = useRef<NodeJS.Timeout | null>(null);
+  
+  const handleOutlineUpdate = useCallback((outline: PPTOutline) => {
+    setCurrentOutline(outline);
+    
+    // 清除之前的定时器
+    if (autoSaveTimeout.current) {
+      clearTimeout(autoSaveTimeout.current);
+    }
+    
+    // 500ms 后自动保存
+    autoSaveTimeout.current = setTimeout(async () => {
+      try {
+        await outlineApi.autoSaveOutline(outline.id, {
+          title: outline.title,
+          objective: outline.objective,
+          chapters: outline.chapters,
+        });
+        console.log('大纲已自动保存');
+      } catch (error) {
+        console.error('自动保存失败:', error);
+      }
+    }, 500);
+  }, []);
 
   const handleTemplateSelect = async (template: OutlineTemplate) => {
     setShowTemplates(false);
@@ -198,7 +224,7 @@ export default function Outline() {
             <Card className="preview-card" title="大纲预览">
               <OutlinePreview
                 outline={currentOutline}
-                onUpdate={setCurrentOutline}
+                onUpdate={handleOutlineUpdate}
               />
             </Card>
           )}

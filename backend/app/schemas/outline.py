@@ -96,6 +96,18 @@ class OutlineListResponse(BaseModel):
 
 
 # 智能生成相关
+class SmartGenerateRequest(BaseModel):
+    """智能生成大纲请求（前端格式）"""
+    description: str = Field(..., min_length=10, max_length=2000)
+
+
+class SmartGenerateResponse(BaseModel):
+    """智能生成大纲响应（前端格式）"""
+    outline: dict  # PPTOutline 对象
+    suggestions: List[str] = []
+    confidence: float = 0.8
+
+
 class IntelligentGenerateRequest(BaseModel):
     """智能生成大纲请求"""
     topic: str = Field(..., min_length=10, max_length=2000)
@@ -146,3 +158,24 @@ class WizardStep3Response(BaseModel):
     """向导第三步响应"""
     outline_id: str
     outline: OutlineDetailResponse
+
+
+# 确认大纲相关
+class ConfirmOutlineResponse(BaseModel):
+    """确认大纲响应"""
+    success: bool = True
+    assembly_draft_id: str  # 自动创建的组装草稿ID
+    message: str = "大纲已确认，已创建组装草稿"
+
+
+class AutoSaveOutlineRequest(BaseModel):
+    """自动保存大纲请求"""
+    title: str
+    description: Optional[str] = None
+    sections: List[dict] = []  # 章节列表
+
+
+class AutoSaveOutlineResponse(BaseModel):
+    """自动保存大纲响应"""
+    success: bool = True
+    saved_at: datetime

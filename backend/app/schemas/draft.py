@@ -78,9 +78,19 @@ class DraftResponse(DraftBase):
         from_attributes = True
 
 
+class DraftSectionInfo(BaseModel):
+    """草稿章节信息（来自关联的大纲）"""
+    id: str
+    title: str
+    description: Optional[str] = None
+    expected_pages: Optional[int] = None
+    order_index: int
+
+
 class DraftDetailResponse(DraftResponse):
     """草稿详情响应 Schema"""
     pages: List[DraftPageResponse] = []
+    sections: Optional[List[DraftSectionInfo]] = None
     exported_file_path: Optional[str] = None
 
 

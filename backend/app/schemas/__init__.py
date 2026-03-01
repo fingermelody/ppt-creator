@@ -40,6 +40,8 @@ from app.schemas.outline import (
     OutlineResponse,
     OutlineDetailResponse,
     OutlineListResponse,
+    SmartGenerateRequest,
+    SmartGenerateResponse,
     IntelligentGenerateRequest,
     IntelligentGenerateResponse,
     WizardStep1Request,
@@ -48,6 +50,9 @@ from app.schemas.outline import (
     WizardStep2Response,
     WizardStep3Request,
     WizardStep3Response,
+    ConfirmOutlineResponse,
+    AutoSaveOutlineRequest,
+    AutoSaveOutlineResponse,
 )
 from app.schemas.draft import (
     DraftPageCreate,
@@ -159,6 +164,8 @@ __all__ = [
     "OutlineResponse",
     "OutlineDetailResponse",
     "OutlineListResponse",
+    "SmartGenerateRequest",
+    "SmartGenerateResponse",
     "IntelligentGenerateRequest",
     "IntelligentGenerateResponse",
     "WizardStep1Request",
@@ -167,6 +174,9 @@ __all__ = [
     "WizardStep2Response",
     "WizardStep3Request",
     "WizardStep3Response",
+    "ConfirmOutlineResponse",
+    "AutoSaveOutlineRequest",
+    "AutoSaveOutlineResponse",
     # Draft
     "DraftPageCreate",
     "DraftPageUpdate",

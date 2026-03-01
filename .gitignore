@@ -69,3 +69,9 @@ htmlcov/
 # Misc
 *.bak
 *.tmp
+
+# 大文件
+backend.zip
+backend/deploy.zip
+backend/layer.zip
+*.zip
