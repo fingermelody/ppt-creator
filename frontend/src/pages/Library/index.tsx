@@ -5,12 +5,14 @@ import {
   Table, 
   Upload, 
   Dialog, 
+  DialogPlugin,
   Tag, 
   Space, 
   Loading, 
   Empty, 
   MessagePlugin,
-  Tooltip
+  Tooltip,
+  Progress
 } from 'tdesign-react';
 import { 
   UploadIcon, 
@@ -20,15 +22,16 @@ import {
   CheckCircleFilledIcon, 
   CloseCircleFilledIcon,
   DownloadIcon,
-  FileIcon,
-  FilePowerpointIcon
+  FilePowerpointIcon,
+  TimeIcon
 } from 'tdesign-icons-react';
 import documentsApi from '../../api/documents';
-import { Document } from '../../types/document';
+import { Document, DocumentStatus } from '../../types/document';
+import PPTViewer from '../../components/PPTViewer';
 import './index.css';
 
 // 上传状态枚举
-type UploadStatus = 'idle' | 'uploading' | 'completing' | 'success' | 'error';
+type UploadStatusType = 'idle' | 'uploading' | 'completing' | 'success' | 'error';
 
 // 格式化文件大小
 const formatFileSize = (bytes?: number) => {
@@ -50,35 +53,72 @@ const formatDate = (dateStr: string) => {
   });
 };
 
+// 处理中的状态列表
+const PROCESSING_STATUSES: DocumentStatus[] = ['uploading', 'processing', 'parsing', 'vectorizing'];
+
 export default function Library() {
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
+  const [uploadStatus, setUploadStatus] = useState<UploadStatusType>('idle');
   const [uploadError, setUploadError] = useState<string | null>(null);
   
   // 预览相关状态
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<Document | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [previewLoading, setPreviewLoading] = useState(false);
   
   // 使用 ref 来避免在 finally 中重置进度时的竞态条件
   const uploadAbortedRef = useRef(false);
+  
+  // 自动刷新定时器
+  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadDocuments();
+    
+    return () => {
+      // 清理定时器
+      if (refreshTimerRef.current) {
+        clearInterval(refreshTimerRef.current);
+      }
+    };
   }, []);
+  
+  // 检查是否有处理中的文档，如果有则启动自动刷新
+  useEffect(() => {
+    const hasProcessingDocs = documents.some(doc => 
+      PROCESSING_STATUSES.includes(doc.status)
+    );
+    
+    if (hasProcessingDocs && !refreshTimerRef.current) {
+      // 每 3 秒刷新一次
+      refreshTimerRef.current = setInterval(() => {
+        loadDocuments(true);
+      }, 3000);
+    } else if (!hasProcessingDocs && refreshTimerRef.current) {
+      // 没有处理中的文档，停止自动刷新
+      clearInterval(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
+  }, [documents]);
 
-  const loadDocuments = async () => {
-    setLoading(true);
+  const loadDocuments = async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const response = await documentsApi.getDocuments({ page: 1, limit: 50 });
       setDocuments(response.documents);
     } catch (error) {
       console.error('Failed to load documents:', error);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -193,25 +233,84 @@ export default function Library() {
   };
 
   const handleDelete = async (documentId: string) => {
-    const confirmDialog = Dialog.confirm({
+    const dialog = DialogPlugin.confirm({
       header: '确认删除',
-      body: '确定要删除此文档吗？',
+      body: '确定要删除此文档吗？删除后不可恢复。',
+      confirmBtn: {
+        content: '删除',
+        theme: 'danger',
+      },
       onConfirm: async () => {
         try {
           await documentsApi.deleteDocument(documentId);
+          MessagePlugin.success('删除成功');
           await loadDocuments();
-          confirmDialog.destroy();
+          dialog.destroy();
         } catch (error) {
           console.error('Delete failed:', error);
+          MessagePlugin.error('删除失败');
         }
       },
     });
   };
 
+  // 获取 API 基础 URL
+  const getApiBaseUrl = () => {
+    return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  };
+
   // 预览文档
-  const handlePreview = (doc: Document) => {
+  const handlePreview = async (doc: Document) => {
+    // 检查文档状态
+    if (PROCESSING_STATUSES.includes(doc.status)) {
+      MessagePlugin.warning('文档正在处理中，请稍后再试');
+      return;
+    }
+    
     setPreviewDocument(doc);
+    setPreviewLoading(true);
     setPreviewVisible(true);
+    
+    try {
+      const response = await documentsApi.previewDocument(doc.id);
+      
+      if (!response.success) {
+        // 处理文档仍在处理中的情况
+        if (response.status && PROCESSING_STATUSES.includes(response.status as DocumentStatus)) {
+          MessagePlugin.warning(response.message || '文档正在处理中，请稍后再试');
+          setPreviewVisible(false);
+          return;
+        }
+        MessagePlugin.error(response.message || '获取预览链接失败');
+        setPreviewVisible(false);
+        return;
+      }
+      
+      if (response.preview_url) {
+        // 如果是相对路径，添加 API 基础 URL
+        let fullUrl = response.preview_url;
+        if (response.preview_url.startsWith('/')) {
+          fullUrl = `${getApiBaseUrl()}${response.preview_url}`;
+        }
+        setPreviewUrl(fullUrl);
+      } else {
+        MessagePlugin.error('获取预览链接失败');
+        setPreviewVisible(false);
+      }
+    } catch (error) {
+      console.error('Preview failed:', error);
+      MessagePlugin.error('获取预览链接失败');
+      setPreviewVisible(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  // 关闭预览
+  const handleClosePreview = () => {
+    setPreviewVisible(false);
+    setPreviewUrl('');
+    setPreviewDocument(null);
   };
 
   // 下载文档
@@ -225,15 +324,21 @@ export default function Library() {
     document.body.removeChild(link);
   };
 
-  const getStatusTag = (status: string) => {
-    const statusMap: Record<string, { theme: 'warning' | 'primary' | 'success' | 'danger' | 'default'; label: string }> = {
-      uploading: { theme: 'warning', label: '上传中' },
-      parsing: { theme: 'primary', label: '解析中' },
+  const getStatusTag = (status: DocumentStatus) => {
+    const statusMap: Record<DocumentStatus, { theme: 'warning' | 'primary' | 'success' | 'danger' | 'default'; label: string; icon?: React.ReactNode }> = {
+      uploading: { theme: 'warning', label: '上传中', icon: <TimeIcon /> },
+      processing: { theme: 'warning', label: '处理中', icon: <TimeIcon /> },
+      parsing: { theme: 'primary', label: '解析中', icon: <TimeIcon /> },
+      vectorizing: { theme: 'primary', label: '向量化中', icon: <TimeIcon /> },
       ready: { theme: 'success', label: '就绪' },
       error: { theme: 'danger', label: '错误' },
     };
-    const config = statusMap[status] || { theme: 'default', label: status };
-    return <Tag theme={config.theme}>{config.label}</Tag>;
+    const config = statusMap[status] || { theme: 'default' as const, label: status };
+    return (
+      <Tag theme={config.theme} icon={config.icon}>
+        {config.label}
+      </Tag>
+    );
   };
 
   // 表格列定义
@@ -254,9 +359,21 @@ export default function Library() {
     {
       colKey: 'page_count',
       title: '页数',
-      width: 80,
+      width: 100,
       align: 'center' as const,
-      cell: ({ row }: { row: Document }) => `${row.page_count} 页`,
+      cell: ({ row }: { row: Document }) => {
+        if (PROCESSING_STATUSES.includes(row.status)) {
+          return <span style={{ color: '#999' }}>处理中...</span>;
+        }
+        const vectorizedInfo = row.vectorized_pages !== undefined && row.vectorized_pages > 0 
+          ? ` (${row.vectorized_pages} 页已向量化)` 
+          : '';
+        return (
+          <Tooltip content={`共 ${row.page_count} 页${vectorizedInfo}`}>
+            <span>{row.page_count} 页</span>
+          </Tooltip>
+        );
+      },
     },
     {
       colKey: 'file_size',
@@ -268,7 +385,7 @@ export default function Library() {
     {
       colKey: 'status',
       title: '状态',
-      width: 100,
+      width: 120,
       align: 'center' as const,
       cell: ({ row }: { row: Document }) => getStatusTag(row.status),
     },
@@ -283,40 +400,45 @@ export default function Library() {
       title: '操作',
       width: 200,
       fixed: 'right' as const,
-      cell: ({ row }: { row: Document }) => (
-        <Space>
-          <Tooltip content="查看">
-            <Button
-              size="small"
-              variant="text"
-              shape="circle"
-              icon={<BrowseIcon />}
-              disabled={row.status !== 'ready'}
-              onClick={() => handlePreview(row)}
-            />
-          </Tooltip>
-          <Tooltip content="下载">
-            <Button
-              size="small"
-              variant="text"
-              shape="circle"
-              icon={<DownloadIcon />}
-              disabled={row.status !== 'ready'}
-              onClick={() => handleDownload(row)}
-            />
-          </Tooltip>
-          <Tooltip content="删除">
-            <Button
-              size="small"
-              variant="text"
-              shape="circle"
-              theme="danger"
-              icon={<DeleteIcon />}
-              onClick={() => handleDelete(row.id)}
-            />
-          </Tooltip>
-        </Space>
-      ),
+      cell: ({ row }: { row: Document }) => {
+        const isProcessing = PROCESSING_STATUSES.includes(row.status);
+        const isReady = row.status === 'ready';
+        
+        return (
+          <Space size="small">
+            <Tooltip content={isProcessing ? '文档处理中，请稍候' : '查看'}>
+              <Button
+                size="medium"
+                variant="text"
+                shape="circle"
+                icon={<BrowseIcon size="20px" />}
+                disabled={!isReady}
+                onClick={() => handlePreview(row)}
+              />
+            </Tooltip>
+            <Tooltip content={isProcessing ? '文档处理中，请稍候' : '下载'}>
+              <Button
+                size="medium"
+                variant="text"
+                shape="circle"
+                icon={<DownloadIcon size="20px" />}
+                disabled={!isReady}
+                onClick={() => handleDownload(row)}
+              />
+            </Tooltip>
+            <Tooltip content="删除">
+              <Button
+                size="medium"
+                variant="text"
+                shape="circle"
+                theme="danger"
+                icon={<DeleteIcon size="20px" />}
+                onClick={() => handleDelete(row.id)}
+              />
+            </Tooltip>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -414,59 +536,14 @@ export default function Library() {
         </div>
       </Dialog>
 
-      {/* 预览弹窗 */}
-      <Dialog
-        header={previewDocument?.title || '文档预览'}
+      {/* PPT 预览组件 */}
+      <PPTViewer
         visible={previewVisible}
-        width={600}
-        footer={
-          <Space>
-            <Button onClick={() => setPreviewVisible(false)}>关闭</Button>
-            {previewDocument && (
-              <Button theme="primary" icon={<DownloadIcon />} onClick={() => handleDownload(previewDocument)}>
-                下载文档
-              </Button>
-            )}
-          </Space>
-        }
-        onClose={() => setPreviewVisible(false)}
-      >
-        {previewDocument && (
-          <div className="preview-content">
-            <div className="preview-info">
-              <div className="preview-icon">
-                <FilePowerpointIcon size="80px" style={{ color: '#D24726' }} />
-              </div>
-              <div className="preview-details">
-                <div className="preview-item">
-                  <span className="label">文档名称：</span>
-                  <span className="value">{previewDocument.title}</span>
-                </div>
-                <div className="preview-item">
-                  <span className="label">页数：</span>
-                  <span className="value">{previewDocument.page_count} 页</span>
-                </div>
-                <div className="preview-item">
-                  <span className="label">文件大小：</span>
-                  <span className="value">{formatFileSize(previewDocument.file_size)}</span>
-                </div>
-                <div className="preview-item">
-                  <span className="label">上传时间：</span>
-                  <span className="value">{formatDate(previewDocument.created_at)}</span>
-                </div>
-                <div className="preview-item">
-                  <span className="label">状态：</span>
-                  <span className="value">{getStatusTag(previewDocument.status)}</span>
-                </div>
-              </div>
-            </div>
-            <div className="preview-tip">
-              <FileIcon size="16px" />
-              <span>PPT 文件需要下载后使用 PowerPoint 或 WPS 打开查看</span>
-            </div>
-          </div>
-        )}
-      </Dialog>
+        fileUrl={previewUrl}
+        fileName={previewDocument?.title || '文档预览'}
+        onClose={handleClosePreview}
+        onDownload={previewDocument ? () => handleDownload(previewDocument) : undefined}
+      />
     </div>
   );
 }
