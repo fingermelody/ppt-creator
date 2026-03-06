@@ -6,6 +6,7 @@ import {
   Table,
   Space,
   Dialog,
+  DialogPlugin,
   Tag,
   Input,
   Loading,
@@ -50,7 +51,7 @@ export default function Drafts() {
   };
 
   const handleDelete = async (draftId: string) => {
-    const dialog = Dialog.confirm({
+    const dialog = DialogPlugin.confirm({
       header: '确认删除',
       body: '确定要删除此草稿吗？',
       onConfirm: async () => {

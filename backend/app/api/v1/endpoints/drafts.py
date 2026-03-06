@@ -2,6 +2,7 @@
 草稿管理 API
 """
 
+import logging
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -26,6 +27,7 @@ from app.schemas import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ============== 草稿 CRUD ==============
@@ -475,6 +477,132 @@ async def export_draft(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"导出失败: {str(e)}"
+        )
+
+
+@router.post("/{draft_id}/preview", response_model=DraftExportResponse, summary="预览草稿")
+async def preview_draft(
+    draft_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """导出草稿为 PPTX 并生成预览 URL（上传到 COS）"""
+    from datetime import datetime
+    from app.services.ppt_export import ppt_export_service
+    from app.services.cos_upload import cos_upload_service
+    import os
+    
+    draft = db.query(Draft).filter(
+        Draft.id == draft_id,
+        Draft.owner_id == user_id,
+        Draft.is_deleted == False
+    ).first()
+    
+    if not draft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="草稿不存在"
+        )
+    
+    # 获取草稿页面
+    pages = db.query(DraftPage).filter(
+        DraftPage.draft_id == draft_id
+    ).order_by(DraftPage.order_index).all()
+    
+    if not pages:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="草稿没有页面，无法预览"
+        )
+    
+    # 获取章节信息（与导出功能相同）
+    chapters_data = []
+    if draft.outline_id:
+        sections = db.query(OutlineSection).filter(
+            OutlineSection.outline_id == draft.outline_id
+        ).order_by(OutlineSection.order_index).all()
+        
+        section_pages = {}
+        for page in pages:
+            sid = page.section_id or 'unassigned'
+            if sid not in section_pages:
+                section_pages[sid] = []
+            section_pages[sid].append(page)
+        
+        for section in sections:
+            chapter_pages = section_pages.get(section.id, [])
+            chapters_data.append({
+                'title': section.title,
+                'description': section.description or '',
+                'pages': [
+                    {
+                        'title': p.title or section.title,
+                        'content_summary': p.title or ''
+                    }
+                    for p in chapter_pages
+                ]
+            })
+    else:
+        chapters_data.append({
+            'title': draft.title,
+            'description': draft.description or '',
+            'pages': [
+                {
+                    'title': p.title or f'页面 {i+1}',
+                    'content_summary': p.title or ''
+                }
+                for i, p in enumerate(pages)
+            ]
+        })
+    
+    # 生成 PPT
+    try:
+        filepath = ppt_export_service.create_ppt(
+            title=draft.title,
+            chapters=chapters_data,
+            description=draft.description
+        )
+        
+        file_size = os.path.getsize(filepath)
+        filename = f"{draft.title}.pptx"
+        
+        # 上传到 COS 并获取预览 URL
+        if cos_upload_service.enabled:
+            preview_url = cos_upload_service.get_preview_url(filepath)
+            
+            if preview_url:
+                # 更新草稿状态
+                draft.exported_file_path = filepath
+                draft.status = DraftStatus.COMPLETED
+                db.commit()
+                
+                return DraftExportResponse(
+                    download_url=preview_url,
+                    file_size=file_size,
+                    file_name=filename,
+                    exported_at=datetime.utcnow()
+                )
+            else:
+                # COS 上传失败，回退到本地文件 URL
+                return DraftExportResponse(
+                    download_url=f"/api/drafts/{draft_id}/download/{os.path.basename(filepath)}",
+                    file_size=file_size,
+                    file_name=filename,
+                    exported_at=datetime.utcnow()
+                )
+        else:
+            # COS 未配置，使用本地文件 URL
+            return DraftExportResponse(
+                download_url=f"/api/drafts/{draft_id}/download/{os.path.basename(filepath)}",
+                file_size=file_size,
+                file_name=filename,
+                exported_at=datetime.utcnow()
+            )
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"预览准备失败: {str(e)}"
         )
 
 

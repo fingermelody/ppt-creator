@@ -11,7 +11,7 @@ import {
 } from 'tdesign-react';
 import { ChevronLeftIcon, DownloadIcon } from 'tdesign-icons-react';
 import refinementApi from '../../api/refinement';
-import { RefinementMessage } from '../../types/refinement';
+import { RefinementMessage, RefinementTask } from '../../types/refinement';
 import { useRefinementStore } from '../../stores/refinementStore';
 import PageList from './components/PageList';
 import ChatPanel from './components/ChatPanel';
@@ -53,9 +53,21 @@ export default function Refinement() {
     setLoading(true);
     try {
       const response = await refinementApi.getTaskDetail(id);
-      setTask(response.task);
-      setPages(response.pages);
-      setCurrentPageIndex(response.task.current_page_index);
+      // 后端直接返回任务对象，构造前端需要的格式
+      const taskData: RefinementTask = {
+        id: response.id,
+        draft_id: response.draft_id,
+        title: response.title,
+        status: response.status as RefinementTask['status'],
+        current_page_index: 0,  // 默认从第一页开始
+        total_pages: response.total_pages,
+        version: response.version,
+        created_at: response.created_at,
+        updated_at: response.updated_at,
+      };
+      setTask(taskData);
+      setPages(response.pages || []);
+      setCurrentPageIndex(0);  // 默认选中第一页
     } catch (error) {
       console.error('Failed to load task:', error);
       MessagePlugin.error('加载精修任务失败');

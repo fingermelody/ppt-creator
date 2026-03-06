@@ -23,12 +23,11 @@ export default function PageList({ pages, currentPageIndex, onPageSelect }: Page
                 <span className="page-number">{page.page_index + 1}</span>
               </div>
               <div className="page-info">
-                <p className="page-source">来源: 第{page.source_page_number}页</p>
+                <span className="page-title">{page.title || `页面 ${page.page_index + 1}`}</span>
                 <div className="page-meta">
-                  {page.modification_count > 0 && (
+                  {(page.modification_count ?? 0) > 0 && (
                     <Badge count={page.modification_count} />
                   )}
-                  <span className="page-version">v{page.version}</span>
                 </div>
               </div>
             </div>

@@ -1,5 +1,13 @@
 """
 文档管理 API
+
+上传流程：
+1. 分片上传到本地临时目录
+2. 合并分片
+3. 上传 PPT 到 COS 存储桶（永久存储）
+4. 解析 PPT 每一页内容
+5. 创建 Slide 记录并向量化
+6. 更新文档状态为就绪
 """
 
 from typing import Optional
@@ -8,12 +16,14 @@ import uuid
 import shutil
 from pathlib import Path
 import logging
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.db import get_db, SessionLocal
 from app.core import get_current_user_id
 from app.core.config import settings
 from app.models import Document, Slide, DocumentStatus
@@ -37,6 +47,9 @@ router = APIRouter()
 # 内存中存储上传会话信息（生产环境应使用 Redis）
 upload_sessions = {}
 
+# 线程池执行器（用于后台处理）
+executor = ThreadPoolExecutor(max_workers=4)
+
 
 def get_upload_dir() -> Path:
     """获取上传目录，优先使用相对于项目的目录"""
@@ -54,41 +67,129 @@ def get_chunk_dir(upload_id: str) -> Path:
     return chunk_dir
 
 
-def get_page_count(file_path: Path) -> int:
-    """获取文档页数"""
-    file_ext = file_path.suffix.lower()
-    page_count = 0
-    
-    try:
-        if file_ext in ['.ppt', '.pptx']:
-            from pptx import Presentation
-            prs = Presentation(str(file_path))
-            page_count = len(prs.slides)
-        elif file_ext == '.pdf':
-            try:
-                import fitz  # PyMuPDF
-                doc = fitz.open(str(file_path))
-                page_count = len(doc)
-                doc.close()
-            except ImportError:
-                # 如果没有 PyMuPDF，尝试使用 pypdf
-                try:
-                    from pypdf import PdfReader
-                    reader = PdfReader(str(file_path))
-                    page_count = len(reader.pages)
-                except ImportError:
-                    logger.warning("无法解析 PDF：缺少 PyMuPDF 或 pypdf 库")
-    except Exception as e:
-        logger.error(f"解析文件页数失败: {e}")
-    
-    return page_count
-
-
 def get_file_dir() -> Path:
     """获取最终文件存储目录"""
     file_dir = get_upload_dir() / "files"
     file_dir.mkdir(parents=True, exist_ok=True)
     return file_dir
+
+
+def process_document_background(document_id: str, file_path: str, original_filename: str):
+    """
+    后台处理文档：上传到 COS、解析内容、向量化
+    
+    Args:
+        document_id: 文档 ID
+        file_path: 本地文件路径
+        original_filename: 原始文件名
+    """
+    from app.services.cos_upload import cos_upload_service
+    from app.services.ppt_parser import parse_ppt_file
+    from app.services.vectorization import get_vectorization_service
+    
+    # 创建新的数据库会话
+    db = SessionLocal()
+    
+    try:
+        # 获取文档记录
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if not document:
+            logger.error(f"文档不存在: {document_id}")
+            return
+        
+        # 1. 上传到 COS
+        logger.info(f"开始上传文档到 COS: {document_id}")
+        document.status = DocumentStatus.PROCESSING
+        db.commit()
+        
+        cos_key, cos_url = cos_upload_service.upload_ppt(
+            file_path=file_path,
+            document_id=document_id,
+            original_filename=original_filename
+        )
+        
+        if not cos_key or not cos_url:
+            raise Exception("上传到 COS 失败")
+        
+        document.cos_object_key = cos_key
+        document.cos_url = cos_url
+        db.commit()
+        logger.info(f"文档上传到 COS 成功: {cos_url}")
+        
+        # 2. 解析 PPT
+        logger.info(f"开始解析 PPT: {document_id}")
+        document.status = DocumentStatus.PARSING
+        db.commit()
+        
+        slides_content = parse_ppt_file(file_path)
+        document.page_count = len(slides_content)
+        db.commit()
+        logger.info(f"PPT 解析完成，共 {len(slides_content)} 页")
+        
+        # 3. 创建 Slide 记录并向量化
+        logger.info(f"开始创建 Slide 记录和向量化: {document_id}")
+        document.status = DocumentStatus.VECTORIZING
+        db.commit()
+        
+        vectorization_service = get_vectorization_service()
+        vectorized_count = 0
+        
+        for slide_content in slides_content:
+            slide_id = str(uuid.uuid4())
+            
+            # 创建 Slide 记录
+            slide = Slide(
+                id=slide_id,
+                document_id=document_id,
+                page_number=slide_content.page_number,
+                title=slide_content.title,
+                content_text=slide_content.content_text,
+                layout_type=slide_content.layout_type,
+                elements=slide_content.elements,
+            )
+            db.add(slide)
+            db.flush()  # 获取 slide ID
+            
+            # 向量化
+            if slide_content.content_text:
+                vector_id = vectorization_service.vectorize_slide(
+                    slide_id=slide_id,
+                    document_id=document_id,
+                    page_number=slide_content.page_number,
+                    content_text=slide_content.content_text,
+                    title=slide_content.title
+                )
+                
+                if vector_id:
+                    slide.vector_id = vector_id
+                    slide.is_vectorized = 1
+                    vectorized_count += 1
+            
+            db.commit()
+            logger.debug(f"处理完成: 第 {slide_content.page_number} 页")
+        
+        # 4. 更新文档状态
+        document.vectorized_pages = vectorized_count
+        document.status = DocumentStatus.READY
+        db.commit()
+        
+        logger.info(f"文档处理完成: {document_id}，共 {len(slides_content)} 页，{vectorized_count} 页已向量化")
+        
+        # 5. 清理本地临时文件（可选，保留用于备份）
+        # os.remove(file_path)
+        
+    except Exception as e:
+        logger.error(f"处理文档失败: {document_id}, 错误: {e}")
+        try:
+            document = db.query(Document).filter(Document.id == document_id).first()
+            if document:
+                document.status = DocumentStatus.ERROR
+                document.error_message = str(e)
+                db.commit()
+        except:
+            pass
+    finally:
+        db.close()
 
 
 @router.post("/upload/init", response_model=UploadInitResponse, summary="初始化分片上传")
@@ -169,11 +270,18 @@ async def upload_chunk(
 @router.post("/upload/complete", response_model=UploadCompleteResponse, summary="完成上传")
 async def complete_upload(
     request: UploadCompleteRequest,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
     """
-    完成分片上传，合并文件并开始解析
+    完成分片上传，合并文件并开始后台处理
+    
+    后台处理流程：
+    1. 上传 PPT 到 COS 存储桶
+    2. 解析 PPT 每一页内容
+    3. 创建 Slide 记录
+    4. 向量化每一页内容
     """
     upload_id = request.upload_id
     
@@ -225,11 +333,8 @@ async def complete_upload(
             detail=f"文件合并失败: {str(e)}"
         )
     
-    # 创建文档记录
+    # 创建文档记录（初始状态为处理中）
     document_id = str(uuid.uuid4())
-    
-    # 获取页数
-    page_count = get_page_count(final_path)
     
     document = Document(
         id=document_id,
@@ -238,8 +343,8 @@ async def complete_upload(
         title=request.title or Path(original_filename).stem,
         file_size=session["filesize"],
         file_path=str(final_path),
-        page_count=page_count,
-        status=DocumentStatus.READY,  # 简化处理，直接标记为就绪
+        page_count=0,  # 稍后由后台任务更新
+        status=DocumentStatus.UPLOADING,  # 初始状态
         owner_id=user_id
     )
     
@@ -250,9 +355,19 @@ async def complete_upload(
     # 清理上传会话
     del upload_sessions[upload_id]
     
+    # 启动后台处理任务
+    background_tasks.add_task(
+        process_document_background,
+        document_id=document_id,
+        file_path=str(final_path),
+        original_filename=original_filename
+    )
+    
+    logger.info(f"文档上传完成，启动后台处理: {document_id}")
+    
     return UploadCompleteResponse(
         document_id=document_id,
-        status="ready"
+        status="processing"  # 返回处理中状态
     )
 
 
@@ -357,6 +472,101 @@ async def download_document_file(
         path=str(file_path),
         filename=document.original_filename,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    )
+
+
+@router.post("/{document_id}/preview", summary="获取文档预览链接")
+async def preview_document(
+    document_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """
+    获取文档预览链接
+    
+    使用 COS 存储的文件生成腾讯云数据万象预览 URL
+    """
+    from app.services.cos_upload import cos_upload_service
+    
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.owner_id == user_id,
+        Document.is_deleted == False
+    ).first()
+    
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文档不存在"
+        )
+    
+    # 检查文档状态
+    if document.status == DocumentStatus.ERROR:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"文档处理失败: {document.error_message or '未知错误'}"
+        )
+    
+    if document.status in [DocumentStatus.UPLOADING, DocumentStatus.PROCESSING]:
+        return {
+            "success": False,
+            "message": "文档正在处理中，请稍后再试",
+            "status": document.status.value
+        }
+    
+    # 优先使用 COS 存储的文件
+    if document.cos_object_key:
+        preview_url = cos_upload_service.get_preview_url(document.cos_object_key)
+        
+        if preview_url:
+            logger.info(f"文档 {document_id} 预览链接生成成功（COS）")
+            return {
+                "success": True,
+                "preview_url": preview_url,
+                "filename": document.original_filename,
+                "preview_type": "cos",
+                "cos_url": document.cos_url
+            }
+    
+    # 降级方案：使用本地文件
+    if document.file_path:
+        file_path = Path(document.file_path)
+        if file_path.exists():
+            # 尝试上传本地文件到 COS 并生成预览
+            cos_key, cos_url = cos_upload_service.upload_ppt(
+                file_path=str(file_path),
+                document_id=document_id,
+                original_filename=document.original_filename
+            )
+            
+            if cos_key and cos_url:
+                # 更新文档的 COS 信息
+                document.cos_object_key = cos_key
+                document.cos_url = cos_url
+                db.commit()
+                
+                preview_url = cos_upload_service.get_preview_url(cos_key)
+                if preview_url:
+                    return {
+                        "success": True,
+                        "preview_url": preview_url,
+                        "filename": document.original_filename,
+                        "preview_type": "cos",
+                        "cos_url": cos_url
+                    }
+            
+            # 最后降级：返回本地文件下载链接
+            logger.warning(f"COS 预览不可用，降级使用本地文件: {document_id}")
+            return {
+                "success": True,
+                "preview_url": f"/api/documents/{document_id}/file",
+                "filename": document.original_filename,
+                "preview_type": "local"
+            }
+    
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="文档文件不存在"
     )
 
 

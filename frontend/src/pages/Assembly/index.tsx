@@ -14,7 +14,7 @@ import {
   MessagePlugin,
   DialogPlugin,
 } from 'tdesign-react';
-import { AddIcon, RollbackIcon, RollfrontIcon, DownloadIcon, ViewListIcon } from 'tdesign-icons-react';
+import { AddIcon, RollbackIcon, RollfrontIcon, DownloadIcon, ViewListIcon, BrowseIcon } from 'tdesign-icons-react';
 import assemblyApi from '../../api/assembly';
 import outlineApi from '../../api/outline';
 import { AssemblyDraft } from '../../types/assembly';
@@ -22,6 +22,7 @@ import { PPTOutline } from '../../types/outline';
 import { useAssemblyStore } from '../../stores/assemblyStore';
 import ChapterPanel from './components/ChapterPanel';
 import SlidePreview from './components/SlidePreview';
+import PPTViewer from '../../components/PPTViewer';
 import './index.css';
 
 const { Header, Content, Aside } = Layout;
@@ -42,6 +43,11 @@ export default function Assembly() {
   // 大纲相关状态
   const [linkedOutline, setLinkedOutline] = useState<PPTOutline | null>(null);
   const [showOutlineRequired, setShowOutlineRequired] = useState(false);
+
+  // 预览相关状态
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [previewFileName, setPreviewFileName] = useState<string>('');
 
   useEffect(() => {
     const outlineId = searchParams.get('outline');
@@ -177,6 +183,26 @@ export default function Assembly() {
     });
   };
 
+  const handlePreview = async () => {
+    if (!draftId) return;
+
+    try {
+      MessagePlugin.info('正在准备预览...');
+      
+      // 调用预览 API（会自动导出并上传到 COS）
+      const response = await assemblyApi.previewPPT(draftId);
+      const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+      const fileUrl = apiBase + response.download_url;
+      
+      setPreviewUrl(fileUrl);
+      setPreviewFileName(response.file_name || '演示文稿.pptx');
+      setShowPreview(true);
+    } catch (error) {
+      console.error('Preview failed:', error);
+      MessagePlugin.error('预览准备失败，请重试');
+    }
+  };
+
   const handleUndo = async () => {
     if (!draftId) return;
     try {
@@ -297,6 +323,14 @@ export default function Assembly() {
                 重做
               </Button>
               <Button
+                variant="outline"
+                icon={<BrowseIcon />}
+                onClick={handlePreview}
+                disabled={!draft || draft.chapters.length === 0}
+              >
+                预览 PPT
+              </Button>
+              <Button
                 theme="primary"
                 icon={<DownloadIcon />}
                 onClick={handleExport}
@@ -407,6 +441,15 @@ export default function Assembly() {
           </div>
         </div>
       </Dialog>
+
+      {/* PPT Preview Dialog */}
+      <PPTViewer
+        visible={showPreview}
+        fileUrl={previewUrl}
+        fileName={previewFileName}
+        onClose={() => setShowPreview(false)}
+        onDownload={handleExport}
+      />
     </div>
   );
 }
