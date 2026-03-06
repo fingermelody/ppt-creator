@@ -6,6 +6,7 @@ import {
   DocumentListResponse,
   Document,
   Slide,
+  PreviewResponse,
 } from '../types/document';
 
 // 获取 API 基础 URL
@@ -67,6 +68,11 @@ export const documentsApi = {
   // 获取文档文件 URL
   getDocumentFileUrl: (documentId: string) => {
     return `${getBaseUrl()}/api/documents/${documentId}/file`;
+  },
+
+  // 获取文档预览链接
+  previewDocument: async (documentId: string) => {
+    return apiClient.post<PreviewResponse>(`/api/documents/${documentId}/preview`);
   },
 
   // 删除文档

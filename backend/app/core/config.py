@@ -3,10 +3,17 @@
 支持从环境变量和 .env 文件加载配置
 """
 
+import os
 from functools import lru_cache
 from typing import Optional, List
+from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings
+
+
+# 获取项目根目录（backend 目录的父目录）
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+ENV_FILE_PATH = PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
@@ -58,6 +65,13 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE: int = 500 * 1024 * 1024  # 500MB
     ALLOWED_EXTENSIONS: List[str] = [".pptx", ".ppt"]
     CHUNK_SIZE: int = 5 * 1024 * 1024  # 5MB
+    
+    # ============== 腾讯云 COS 配置 ==============
+    COS_SECRET_ID: Optional[str] = None
+    COS_SECRET_KEY: Optional[str] = None
+    COS_REGION: str = "ap-guangzhou"
+    COS_BUCKET: Optional[str] = None
+    COS_DOMAIN: Optional[str] = None
     
     # ============== JWT 认证配置 ==============
     SECRET_KEY: str = Field(
@@ -132,7 +146,7 @@ class Settings(BaseSettings):
     LOG_FILE: Optional[str] = None
     
     class Config:
-        env_file = ".env"
+        env_file = str(ENV_FILE_PATH)
         env_file_encoding = "utf-8"
         case_sensitive = True
         extra = "ignore"  # 忽略额外的环境变量

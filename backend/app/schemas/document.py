@@ -51,6 +51,9 @@ class SlideResponse(BaseModel):
     content_text: Optional[str] = None
     layout_type: Optional[str] = None
     thumbnail_path: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    vector_id: Optional[str] = None
+    is_vectorized: int = 0
     
     class Config:
         from_attributes = True
@@ -72,6 +75,8 @@ class DocumentResponse(BaseModel):
     description: Optional[str] = None
     page_count: int
     status: DocumentStatus
+    cos_url: Optional[str] = None  # COS 访问 URL
+    vectorized_pages: int = 0  # 已向量化的页数
     created_at: datetime
     updated_at: datetime
     
@@ -82,6 +87,7 @@ class DocumentResponse(BaseModel):
 class DocumentDetailResponse(DocumentResponse):
     """文档详情响应 Schema"""
     slides: List[SlideResponse] = []
+    cos_object_key: Optional[str] = None  # COS 对象键
 
 
 class DocumentListParams(BaseModel):

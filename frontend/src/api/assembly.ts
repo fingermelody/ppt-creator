@@ -42,7 +42,7 @@ interface BackendDraftDetail {
   outline_id?: string;
   status: string;
   page_count: number;
-  pages: BackendDraftPage[];
+  pages?: BackendDraftPage[];  // 列表查询时可能不包含 pages
   sections?: BackendSectionInfo[];  // 关联大纲的章节信息
   created_at: string;
   updated_at: string;
@@ -62,7 +62,9 @@ function convertBackendDraftToFrontend(backendDraft: BackendDraftDetail): DraftD
   const sectionMap = new Map<string, BackendDraftPage[]>();
   const unassignedPages: BackendDraftPage[] = [];
 
-  backendDraft.pages.forEach(page => {
+  // 处理 pages 可能为 undefined 的情况
+  const pages = backendDraft.pages || [];
+  pages.forEach(page => {
     if (page.section_id) {
       const existing = sectionMap.get(page.section_id) || [];
       existing.push(page);
@@ -253,6 +255,13 @@ export const assemblyApi = {
     return apiClient.post<{ download_url: string; file_size: number; file_name: string; exported_at: string }>(
       `/api/drafts/${draftId}/export`,
       { filename, format: 'pptx' }
+    );
+  },
+
+  // 预览PPT（导出并上传到 COS）
+  previewPPT: async (draftId: string) => {
+    return apiClient.post<{ download_url: string; file_size: number; file_name: string; exported_at: string }>(
+      `/api/drafts/${draftId}/preview`
     );
   },
 

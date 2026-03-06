@@ -55,11 +55,14 @@ async def get_tasks(
     # 分页
     tasks = query.order_by(RefinementTask.updated_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
     
-    # 获取每个任务的修改次数
+    # 获取每个任务的修改次数（通过 RefinedPage 关联）
     task_items = []
     for task in tasks:
-        modification_count = db.query(func.count(PageModification.id)).filter(
-            PageModification.task_id == task.id
+        # 获取该任务所有页面的修改次数总和
+        modification_count = db.query(func.count(PageModification.id)).join(
+            RefinedPage, PageModification.page_id == RefinedPage.id
+        ).filter(
+            RefinedPage.task_id == task.id
         ).scalar() or 0
         
         task_items.append(RefinementTaskListItem(
@@ -87,8 +90,44 @@ async def create_task(request: CreateTaskRequest, user_id: str = Depends(get_cur
     if not draft:
         raise HTTPException(status_code=404, detail="草稿不存在")
     
-    task = RefinementTask(title=request.title or draft.title, draft_id=request.draft_id, total_pages=draft.page_count, owner_id=user_id)
+    # 获取草稿的页面
+    from app.models.draft import DraftPage
+    draft_pages = db.query(DraftPage).filter(DraftPage.draft_id == draft.id).order_by(DraftPage.order_index).all()
+    
+    # 创建精修任务
+    task = RefinementTask(
+        title=request.title or draft.title, 
+        draft_id=request.draft_id, 
+        total_pages=len(draft_pages) if draft_pages else draft.page_count, 
+        owner_id=user_id
+    )
     db.add(task)
+    db.flush()  # 获取 task.id
+    
+    # 为每个草稿页面创建对应的精修页面
+    for index, draft_page in enumerate(draft_pages):
+        refined_page = RefinedPage(
+            task_id=task.id,
+            page_index=index,
+            title=draft_page.title,
+            thumbnail_path=draft_page.thumbnail_path,
+            content={},  # 初始内容为空
+            elements=[],  # 初始元素为空
+        )
+        db.add(refined_page)
+    
+    # 如果没有草稿页面，创建占位页面
+    if not draft_pages and draft.page_count > 0:
+        for i in range(draft.page_count):
+            refined_page = RefinedPage(
+                task_id=task.id,
+                page_index=i,
+                title=f"页面 {i + 1}",
+                content={},
+                elements=[],
+            )
+            db.add(refined_page)
+    
     db.commit()
     db.refresh(task)
     return CreateTaskResponse(task_id=task.id, total_pages=task.total_pages, created_at=task.created_at)

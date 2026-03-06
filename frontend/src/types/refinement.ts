@@ -4,20 +4,26 @@ export interface RefinementTask {
   id: string;
   draft_id: string;
   title: string;
-  status: 'editing' | 'saved' | 'exported';
-  current_page_index: number;
+  status: 'editing' | 'saved' | 'exported' | 'active';
+  current_page_index?: number;  // 可选，默认从0开始
+  total_pages?: number;
+  version?: string;
   created_at: string;
   updated_at: string;
 }
 
 export interface RefinedPage {
+  id?: string;
   page_index: number;
-  slide_id: string;
-  source_document_id: string;
-  source_page_number: number;
-  current_content: SlideContent;
-  version: number;
-  modification_count: number;
+  slide_id?: string;
+  title?: string;
+  source_document_id?: string;
+  source_page_number?: number;
+  current_content?: SlideContent;
+  thumbnail_path?: string;
+  version?: number;
+  modification_count?: number;
+  elements?: SlideElement[];
 }
 
 export interface SlideContent {
@@ -151,8 +157,15 @@ export interface QuickAction {
 }
 
 export interface TaskDetail {
-  task: RefinementTask;
-  pages: RefinedPage[];
+  // 后端直接返回任务对象（不是嵌套在 task 字段中）
+  id: string;
+  draft_id: string;
+  title: string;
+  status: 'editing' | 'saved' | 'exported' | 'active';
   total_pages: number;
-  total_modifications: number;
+  version: string;
+  pages: RefinedPage[];
+  exported_file_path?: string;
+  created_at: string;
+  updated_at: string;
 }
