@@ -8,6 +8,11 @@ import {
   Slide,
 } from '../types/document';
 
+// 获取 API 基础 URL
+const getBaseUrl = () => {
+  return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+};
+
 export const documentsApi = {
   // 初始化上传
   initUpload: async (filename: string, filesize: number, totalChunks: number) => {
@@ -57,6 +62,11 @@ export const documentsApi = {
   // 获取文档页面列表
   getDocumentSlides: async (documentId: string) => {
     return apiClient.get<{ slides: Slide[] }>(`/api/documents/${documentId}/slides`);
+  },
+
+  // 获取文档文件 URL
+  getDocumentFileUrl: (documentId: string) => {
+    return `${getBaseUrl()}/api/documents/${documentId}/file`;
   },
 
   // 删除文档

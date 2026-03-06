@@ -1,6 +1,7 @@
 import { Card, Button, Space, Popconfirm, Tag } from 'tdesign-react';
 import { RefreshIcon, DeleteIcon } from 'tdesign-icons-react';
 import { Chapter } from '../../../types/assembly';
+import assemblyApi from '../../../api/assembly';
 import './ChapterPanel.css';
 
 interface ChapterPanelProps {
@@ -12,14 +13,12 @@ interface ChapterPanelProps {
 
 export default function ChapterPanel({ chapter, selected, onSelect, onRefresh }: ChapterPanelProps) {
   const handleDelete = async () => {
-    const assemblyMockApi = await import('../../../api/assembly.mock');
-    await assemblyMockApi.default.deleteChapter(chapter.id);
+    await assemblyApi.deleteChapter(chapter.id);
     onRefresh();
   };
 
   const handleRegenerate = async () => {
-    const assemblyMockApi = await import('../../../api/assembly.mock');
-    await assemblyMockApi.default.regenerateChapter(chapter.id);
+    await assemblyApi.regenerateChapter(chapter.id);
     onRefresh();
   };
 

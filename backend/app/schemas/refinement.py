@@ -315,3 +315,27 @@ class AlignElementsResponse(BaseModel):
     success: bool
     modification_id: str
     updated_elements: List[Any]
+
+
+# 任务列表相关
+class RefinementTaskListItem(BaseModel):
+    """精修任务列表项"""
+    id: str
+    title: Optional[str] = None
+    draft_id: str
+    status: RefinementStatus
+    page_count: int
+    modification_count: int
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class RefinementTaskListResponse(BaseModel):
+    """精修任务列表响应"""
+    tasks: List[RefinementTaskListItem]
+    total: int
+    page: int
+    page_size: int

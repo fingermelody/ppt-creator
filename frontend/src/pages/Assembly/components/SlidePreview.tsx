@@ -1,6 +1,7 @@
 import { Card, Button, Space, Tag, Tooltip } from 'tdesign-react';
 import { SwapIcon, DeleteIcon } from 'tdesign-icons-react';
 import { ChapterPage } from '../../../types/assembly';
+import assemblyApi from '../../../api/assembly';
 import './SlidePreview.css';
 
 interface SlidePreviewProps {
@@ -16,8 +17,7 @@ export default function SlidePreview({ page, chapterId, draftId, onRefresh }: Sl
   };
 
   const handleDelete = async () => {
-    const assemblyMockApi = await import('../../../api/assembly.mock');
-    await assemblyMockApi.default.deletePage(draftId, chapterId, page.slide_id);
+    await assemblyApi.deletePage(draftId, chapterId, page.slide_id);
     onRefresh();
   };
 

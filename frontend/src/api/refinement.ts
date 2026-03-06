@@ -10,6 +10,26 @@ import {
 // API 路径前缀
 const API_PREFIX = '/api/refinement';
 
+// 精修任务列表项类型
+interface RefinementTaskListItem {
+  id: string;
+  title: string;
+  draft_id: string;
+  status: 'editing' | 'saved' | 'exported';
+  page_count: number;
+  modification_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// 精修任务列表响应类型
+interface RefinementTaskListResponse {
+  tasks: RefinementTaskListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 // 修改历史记录类型
 interface ModificationHistory {
   id: string;
@@ -38,6 +58,13 @@ interface SSEMessage {
 }
 
 export const refinementApi = {
+  // 获取精修任务列表
+  getTasks: async (page = 1, pageSize = 20, status?: string) => {
+    return apiClient.get<RefinementTaskListResponse>(`${API_PREFIX}/tasks`, {
+      params: { page, page_size: pageSize, status },
+    });
+  },
+
   // 创建精修任务
   createTask: async (draftId: string, title?: string) => {
     return apiClient.post<{ task_id: string; total_pages: number; created_at: string }>(
@@ -625,4 +652,4 @@ export const refinementApi = {
 export default refinementApi;
 
 // 导出类型供外部使用
-export type { ModificationHistory, UndoRedoResponse, SSEMessage };
+export type { ModificationHistory, UndoRedoResponse, SSEMessage, RefinementTaskListItem, RefinementTaskListResponse };

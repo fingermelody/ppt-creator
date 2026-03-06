@@ -34,7 +34,7 @@ import {
   ChartBarIcon,
   InternetIcon,
 } from 'tdesign-icons-react';
-import { generationApi } from '../../api/generation.mock';
+import { generationApi } from '../../api/generation';
 import { useGenerationStore } from '../../stores/generationStore';
 import type { 
   TemplateCategory,

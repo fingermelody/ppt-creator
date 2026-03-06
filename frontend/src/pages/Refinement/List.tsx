@@ -22,8 +22,8 @@ import {
   TimeIcon,
   FileIcon,
 } from 'tdesign-icons-react';
-import assemblyApi from '../../api/assembly.mock';
-import refinementApi from '../../api/refinement.mock';
+import assemblyApi from '../../api/assembly';
+import refinementApi from '../../api/refinement';
 import './List.css';
 
 interface RefinementItem {
@@ -63,31 +63,6 @@ export default function RefinementList() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // 加载已有的精修任务（模拟数据）
-      const mockTasks: RefinementItem[] = [
-        {
-          id: 'task-001',
-          title: '新产品发布会PPT',
-          status: 'editing',
-          page_count: 5,
-          modification_count: 3,
-          created_at: '2026-02-01T10:00:00Z',
-          updated_at: '2026-02-08T15:30:00Z',
-          draft_id: 'draft-002',
-        },
-        {
-          id: 'task-002',
-          title: '年度工作总结',
-          status: 'saved',
-          page_count: 12,
-          modification_count: 8,
-          created_at: '2026-02-05T09:00:00Z',
-          updated_at: '2026-02-07T18:00:00Z',
-          draft_id: 'draft-001',
-        },
-      ];
-      setRefinementTasks(mockTasks);
-
       // 加载可用于精修的草稿
       const draftsResponse = await assemblyApi.getDrafts();
       const completedDrafts = (draftsResponse.drafts || [])
@@ -101,6 +76,25 @@ export default function RefinementList() {
           updated_at: d.updated_at,
         }));
       setDrafts(completedDrafts);
+      
+      // 加载精修任务列表
+      try {
+        const tasksResponse = await refinementApi.getTasks(1, 50);
+        const taskItems = (tasksResponse.tasks || []).map((t: any) => ({
+          id: t.id,
+          title: t.title,
+          status: t.status,
+          page_count: t.page_count,
+          modification_count: t.modification_count,
+          created_at: t.created_at,
+          updated_at: t.updated_at,
+          draft_id: t.draft_id,
+        }));
+        setRefinementTasks(taskItems);
+      } catch (taskError) {
+        console.warn('Failed to load refinement tasks:', taskError);
+        setRefinementTasks([]);
+      }
     } catch (error) {
       console.error('Failed to load data:', error);
       MessagePlugin.error('加载数据失败');

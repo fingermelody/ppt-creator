@@ -26,9 +26,59 @@ from app.schemas import (
     SuggestionsResponse, QuickActionsResponse,
     BatchDeleteRequest, BatchDeleteResponse, BatchStyleRequest, BatchStyleResponse,
     AlignElementsRequest, AlignElementsResponse,
+    RefinementTaskListItem, RefinementTaskListResponse,
 )
 
 router = APIRouter()
+
+
+@router.get("/tasks", response_model=RefinementTaskListResponse, summary="获取精修任务列表")
+async def get_tasks(
+    page: int = 1,
+    page_size: int = 20,
+    status: Optional[str] = None,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """获取当前用户的精修任务列表"""
+    from sqlalchemy import func
+    
+    query = db.query(RefinementTask).filter(RefinementTask.owner_id == user_id)
+    
+    # 状态筛选
+    if status:
+        query = query.filter(RefinementTask.status == status)
+    
+    # 获取总数
+    total = query.count()
+    
+    # 分页
+    tasks = query.order_by(RefinementTask.updated_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    
+    # 获取每个任务的修改次数
+    task_items = []
+    for task in tasks:
+        modification_count = db.query(func.count(PageModification.id)).filter(
+            PageModification.task_id == task.id
+        ).scalar() or 0
+        
+        task_items.append(RefinementTaskListItem(
+            id=task.id,
+            title=task.title,
+            draft_id=task.draft_id,
+            status=task.status,
+            page_count=task.total_pages,
+            modification_count=modification_count,
+            created_at=task.created_at,
+            updated_at=task.updated_at,
+        ))
+    
+    return RefinementTaskListResponse(
+        tasks=task_items,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post("/tasks", response_model=CreateTaskResponse, summary="创建精修任务")

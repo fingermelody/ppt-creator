@@ -32,8 +32,8 @@ class UploadChunkResponse(BaseModel):
 class UploadCompleteRequest(BaseModel):
     """上传完成请求"""
     upload_id: str
-    filename: str
-    md5_hash: Optional[str] = None
+    title: str  # 文档标题（通常从文件名提取，去除扩展名）
+    category: Optional[str] = None  # 可选分类
 
 
 class UploadCompleteResponse(BaseModel):

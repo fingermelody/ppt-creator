@@ -13,7 +13,8 @@ import {
   MessagePlugin,
 } from 'tdesign-react';
 import { AddIcon, SearchIcon } from 'tdesign-icons-react';
-import assemblyApi from '../../api/assembly.mock';
+import assemblyApi from '../../api/assembly';
+import refinementApi from '../../api/refinement';
 import { AssemblyDraft } from '../../types/assembly';
 import './index.css';
 
@@ -78,8 +79,7 @@ export default function Drafts() {
 
   const handleStartRefinement = async (draftId: string) => {
     try {
-      const refinementMockApi = await import('../../api/refinement.mock');
-      const response = await refinementMockApi.default.createTask(draftId);
+      const response = await refinementApi.createTask(draftId);
       navigate(`/refinement/${response.task_id}`);
     } catch (error) {
       console.error('Failed to create refinement task:', error);

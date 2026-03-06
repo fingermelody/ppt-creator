@@ -10,7 +10,7 @@ import {
   MessagePlugin,
 } from 'tdesign-react';
 import { ChevronLeftIcon, DownloadIcon } from 'tdesign-icons-react';
-import refinementApi from '../../api/refinement.mock';
+import refinementApi from '../../api/refinement';
 import { RefinementMessage } from '../../types/refinement';
 import { useRefinementStore } from '../../stores/refinementStore';
 import PageList from './components/PageList';
