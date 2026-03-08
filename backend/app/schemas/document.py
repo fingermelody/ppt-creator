@@ -60,9 +60,34 @@ class SlideResponse(BaseModel):
 
 
 class SlideDetailResponse(SlideResponse):
-    """页面详情响应 Schema"""
+    """页面详情响应 Schema（包含源 PPT 信息，用于 PPT 组装）"""
     elements: Optional[List[Any]] = None
     metadata: Optional[dict] = None
+    # 源 PPT 信息（用于检索和组装）
+    source_url: Optional[str] = None  # 源 PPT 的 COS URL
+    source_filename: Optional[str] = None  # 源 PPT 的原始文件名
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class SlideSearchResult(BaseModel):
+    """页面搜索结果 Schema"""
+    slide_id: str
+    document_id: str
+    page_number: int
+    title: Optional[str] = None
+    content: str
+    source_url: Optional[str] = None  # 源 PPT 的 COS URL
+    source_filename: Optional[str] = None  # 源 PPT 的文件名
+    similarity: float  # 相似度分数 (0-1)
+    distance: float  # 向量距离
+
+
+class SlideSearchResponse(BaseModel):
+    """页面搜索响应 Schema"""
+    query: str
+    total: int
+    results: List[SlideSearchResult]
 
 
 class DocumentResponse(BaseModel):

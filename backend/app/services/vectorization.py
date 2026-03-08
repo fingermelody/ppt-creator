@@ -80,6 +80,8 @@ class VectorizationService:
         page_number: int,
         content_text: str,
         title: Optional[str] = None,
+        source_url: Optional[str] = None,
+        source_filename: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Optional[str]:
         """
@@ -88,9 +90,11 @@ class VectorizationService:
         Args:
             slide_id: 页面 ID
             document_id: 文档 ID
-            page_number: 页码
+            page_number: 页码（从1开始）
             content_text: 页面文本内容
             title: 页面标题
+            source_url: 源 PPT 的 COS URL（用于后续检索和组装）
+            source_filename: 源 PPT 的原始文件名
             metadata: 附加元数据
             
         Returns:
@@ -120,12 +124,14 @@ class VectorizationService:
         # 生成向量 ID
         vector_id = f"slide_{slide_id}"
         
-        # 准备元数据
+        # 准备元数据（包含源 PPT 地址和页码，用于后续检索和组装）
         doc_metadata = {
             "document_id": document_id,
             "slide_id": slide_id,
             "page_number": page_number,
             "title": title or "",
+            "source_url": source_url or "",  # 源 PPT 的 COS URL
+            "source_filename": source_filename or "",  # 源 PPT 的文件名
         }
         if metadata:
             doc_metadata.update(metadata)
@@ -139,7 +145,7 @@ class VectorizationService:
                 metadatas=[doc_metadata]
             )
             
-            logger.info(f"页面 {slide_id} 向量化成功，向量 ID: {vector_id}")
+            logger.info(f"页面 {slide_id} 向量化成功，向量 ID: {vector_id}，源: {source_filename} 第{page_number}页")
             return vector_id
             
         except Exception as e:
@@ -185,7 +191,12 @@ class VectorizationService:
             document_id: 限制在特定文档内搜索
             
         Returns:
-            搜索结果列表
+            搜索结果列表，每个结果包含：
+            - vector_id: 向量 ID
+            - content: 页面内容
+            - metadata: 元数据（含 source_url, source_filename, page_number）
+            - distance: 相似度距离
+            - similarity: 相似度分数（0-1，越高越相似）
         """
         if not self.enabled:
             return []
@@ -217,11 +228,26 @@ class VectorizationService:
                 distances = results.get("distances", [[]])[0] if results.get("distances") else []
                 
                 for i, vid in enumerate(ids):
+                    meta = metadatas[i] if i < len(metadatas) else {}
+                    distance = distances[i] if i < len(distances) else 0
+                    
+                    # 计算相似度分数（将距离转换为相似度，距离越小相似度越高）
+                    # ChromaDB 默认使用 L2 距离，转换为 0-1 的相似度
+                    similarity = max(0, 1 - (distance / 2))
+                    
                     formatted_results.append({
                         "vector_id": vid,
                         "content": documents[i] if i < len(documents) else "",
-                        "metadata": metadatas[i] if i < len(metadatas) else {},
-                        "distance": distances[i] if i < len(distances) else 0,
+                        "metadata": meta,
+                        "distance": distance,
+                        "similarity": round(similarity, 4),
+                        # 便于访问的关键字段
+                        "slide_id": meta.get("slide_id", ""),
+                        "document_id": meta.get("document_id", ""),
+                        "page_number": meta.get("page_number", 0),
+                        "title": meta.get("title", ""),
+                        "source_url": meta.get("source_url", ""),
+                        "source_filename": meta.get("source_filename", ""),
                     })
             
             return formatted_results

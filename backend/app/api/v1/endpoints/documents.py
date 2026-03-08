@@ -134,6 +134,10 @@ def process_document_background(document_id: str, file_path: str, original_filen
         vectorization_service = get_vectorization_service()
         vectorized_count = 0
         
+        # 获取源 PPT 的 COS URL（用于向量化元数据）
+        source_url = document.cos_url
+        source_filename = document.original_filename
+        
         for slide_content in slides_content:
             slide_id = str(uuid.uuid4())
             
@@ -150,14 +154,16 @@ def process_document_background(document_id: str, file_path: str, original_filen
             db.add(slide)
             db.flush()  # 获取 slide ID
             
-            # 向量化
+            # 向量化（包含源 PPT 地址和页码，便于后续检索和组装）
             if slide_content.content_text:
                 vector_id = vectorization_service.vectorize_slide(
                     slide_id=slide_id,
                     document_id=document_id,
                     page_number=slide_content.page_number,
                     content_text=slide_content.content_text,
-                    title=slide_content.title
+                    title=slide_content.title,
+                    source_url=source_url,  # 源 PPT 的 COS URL
+                    source_filename=source_filename  # 源 PPT 的文件名
                 )
                 
                 if vector_id:
@@ -411,6 +417,91 @@ async def get_documents(
         page=page,
         limit=limit
     )
+
+
+@router.post("/slides/search", summary="语义搜索相似页面")
+async def search_similar_slides(
+    query: str,
+    n_results: int = 10,
+    document_id: Optional[str] = None,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """
+    语义搜索相似 PPT 页面
+    
+    根据查询文本，使用向量相似度搜索匹配的 PPT 页面。
+    返回结果包含源 PPT 地址和页码，可用于 PPT 组装。
+    
+    - **query**: 搜索文本（如章节标题或内容描述）
+    - **n_results**: 返回结果数量（默认10条）
+    - **document_id**: 可选，限制在特定文档内搜索
+    
+    返回结果包含：
+    - slide_id: 页面 ID
+    - document_id: 文档 ID
+    - page_number: 页码
+    - title: 页面标题
+    - content: 页面内容
+    - source_url: 源 PPT 的 COS URL（可直接下载）
+    - source_filename: 源 PPT 的文件名
+    - similarity: 相似度分数（0-1，越高越相似）
+    """
+    from app.services.vectorization import get_vectorization_service
+    
+    if not query or not query.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="搜索文本不能为空"
+        )
+    
+    # 如果指定了文档 ID，验证用户权限
+    if document_id:
+        document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.owner_id == user_id,
+            Document.is_deleted == False
+        ).first()
+        
+        if not document:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="文档不存在或无权访问"
+            )
+    
+    vectorization_service = get_vectorization_service()
+    
+    if not vectorization_service.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="向量化服务未启用"
+        )
+    
+    # 执行语义搜索
+    results = vectorization_service.search_similar_slides(
+        query=query.strip(),
+        n_results=n_results,
+        document_id=document_id
+    )
+    
+    # 过滤用户有权访问的结果（如果没有指定文档 ID）
+    if not document_id:
+        # 获取用户的文档 ID 列表
+        user_doc_ids = set(
+            doc.id for doc in db.query(Document.id).filter(
+                Document.owner_id == user_id,
+                Document.is_deleted == False
+            ).all()
+        )
+        
+        # 过滤结果
+        results = [r for r in results if r.get("document_id") in user_doc_ids]
+    
+    return {
+        "query": query,
+        "total": len(results),
+        "results": results
+    }
 
 
 @router.get("/{document_id}", response_model=DocumentDetailResponse, summary="获取文档详情")
