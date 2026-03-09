@@ -13,8 +13,9 @@ import {
   Empty,
   MessagePlugin,
   DialogPlugin,
+  Tag,
 } from 'tdesign-react';
-import { AddIcon, RollbackIcon, RollfrontIcon, DownloadIcon, ViewListIcon, BrowseIcon } from 'tdesign-icons-react';
+import { AddIcon, RollbackIcon, RollfrontIcon, DownloadIcon, ViewListIcon, BrowseIcon, RefreshIcon, ChevronRightIcon } from 'tdesign-icons-react';
 import assemblyApi from '../../api/assembly';
 import outlineApi from '../../api/outline';
 import { AssemblyDraft } from '../../types/assembly';
@@ -43,39 +44,138 @@ export default function Assembly() {
   // 大纲相关状态
   const [linkedOutline, setLinkedOutline] = useState<PPTOutline | null>(null);
   const [showOutlineRequired, setShowOutlineRequired] = useState(false);
+  
+  // 大纲列表状态（当没有指定 draftId 时显示）
+  const [availableOutlines, setAvailableOutlines] = useState<PPTOutline[]>([]);
+  const [showOutlineList, setShowOutlineList] = useState(false);
+  const [outlinesLoading, setOutlinesLoading] = useState(false);
 
   // 预览相关状态
   const [showPreview, setShowPreview] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>('');
   const [previewFileName, setPreviewFileName] = useState<string>('');
+  
+  // 自动匹配相关状态
+  const [isAutoMatching, setIsAutoMatching] = useState(false);
+
+  // 获取 URL 参数中的 outline ID
+  const outlineIdFromUrl = searchParams.get('outline');
 
   useEffect(() => {
-    const outlineId = searchParams.get('outline');
-    
     if (draftId) {
       loadDraft(draftId);
-      if (outlineId) {
-        loadOutline(outlineId);
+      if (outlineIdFromUrl) {
+        loadOutline(outlineIdFromUrl);
       }
-    } else if (outlineId) {
-      // 从大纲页面跳转过来，需要基于大纲创建草稿
-      initializeFromOutline(outlineId);
+    } else if (outlineIdFromUrl) {
+      // 从大纲页面跳转过来，先查找是否有已关联的草稿
+      findDraftByOutlineOrCreate(outlineIdFromUrl);
     } else {
-      // 没有草稿也没有大纲，显示提示
-      setShowOutlineRequired(true);
+      // 没有草稿也没有大纲参数，先检查是否有可用的大纲
+      checkAvailableOutlines();
     }
-  }, [draftId, searchParams]);
+  }, [draftId, outlineIdFromUrl]);
+
+  // 检查是否有可用的大纲
+  const checkAvailableOutlines = async () => {
+    setOutlinesLoading(true);
+    try {
+      // 获取所有大纲
+      const response = await outlineApi.getOutlines({});
+      const outlines = response.outlines || [];
+      
+      // 过滤出已确认（confirmed）状态的大纲，这些可以直接用于组装
+      // 注意：后端返回 'completed'，前端转换为 'confirmed'
+      const confirmedOutlines = outlines.filter(o => o.status === 'confirmed');
+      
+      if (confirmedOutlines.length > 0) {
+        // 有已确认的大纲，显示大纲列表
+        setAvailableOutlines(confirmedOutlines);
+        setShowOutlineList(true);
+        setShowOutlineRequired(false);
+      } else if (outlines.length > 0) {
+        // 有草稿状态的大纲，也显示列表但提示需要先确认
+        setAvailableOutlines(outlines);
+        setShowOutlineList(true);
+        setShowOutlineRequired(false);
+      } else {
+        // 没有任何大纲，显示创建提示
+        setShowOutlineRequired(true);
+        setShowOutlineList(false);
+      }
+    } catch (error) {
+      console.error('Failed to check available outlines:', error);
+      setShowOutlineRequired(true);
+    } finally {
+      setOutlinesLoading(false);
+    }
+  };
+
+  const findDraftByOutlineOrCreate = async (outlineId: string) => {
+    setLoading(true);
+    try {
+      // 先尝试查找已有的草稿
+      const existingDraft = await assemblyApi.getDraftByOutlineId(outlineId);
+      if (existingDraft && existingDraft.draft) {
+        // 找到已有草稿，直接使用
+        navigate(`/assembly/${existingDraft.draft.id}?outline=${outlineId}`, { replace: true });
+        return;
+      }
+      
+      // 没有找到，则基于大纲创建新草稿
+      await initializeFromOutline(outlineId);
+    } catch (error) {
+      console.error('Failed to find draft by outline:', error);
+      // 尝试创建新草稿
+      await initializeFromOutline(outlineId);
+    }
+  };
 
   const loadDraft = async (id: string) => {
     setLoading(true);
     try {
       const response = await assemblyApi.getDraftDetail(id);
       setDraft(response.draft);
+      
+      // 检查是否需要自动匹配页面（如果所有页面都没有 source_slide_id）
+      if (response.draft && response.draft.chapters) {
+        const needsAutoMatch = response.draft.chapters.some(chapter => 
+          chapter.pages.length > 0 && 
+          chapter.pages.every(page => !page.document_id || page.document_id === '')
+        );
+        
+        if (needsAutoMatch) {
+          // 自动触发智能匹配
+          MessagePlugin.info('正在智能匹配素材页面...');
+          await handleAutoMatch(id);
+        }
+      }
     } catch (error) {
       console.error('Failed to load draft:', error);
       MessagePlugin.error('加载草稿失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 自动匹配页面
+  const handleAutoMatch = async (targetDraftId?: string) => {
+    const id = targetDraftId || draftId;
+    if (!id) return;
+
+    setIsAutoMatching(true);
+    try {
+      const response = await assemblyApi.autoMatchPages(id);
+      MessagePlugin.success(response.message);
+      
+      // 重新加载草稿
+      const draftResponse = await assemblyApi.getDraftDetail(id);
+      setDraft(draftResponse.draft);
+    } catch (error) {
+      console.error('Auto match failed:', error);
+      MessagePlugin.warning('智能匹配未找到足够的相关素材，您可以手动添加页面');
+    } finally {
+      setIsAutoMatching(false);
     }
   };
 
@@ -122,6 +222,21 @@ export default function Assembly() {
 
   const handleGoToOutline = () => {
     navigate('/outline');
+  };
+
+  // 选择大纲进行组装
+  const handleSelectOutline = async (outline: PPTOutline) => {
+    if (outline.status !== 'confirmed') {
+      MessagePlugin.warning('请先确认该大纲再进行组装');
+      navigate(`/outline?edit=${outline.id}`);
+      return;
+    }
+    
+    // 隐藏大纲列表，显示 loading
+    setShowOutlineList(false);
+    
+    // 直接调用查找或创建草稿的逻辑
+    await findDraftByOutlineOrCreate(outline.id);
   };
 
   const handleAddChapter = async () => {
@@ -225,7 +340,7 @@ export default function Assembly() {
     }
   };
 
-  if (loading) {
+  if (loading || outlinesLoading) {
     return (
       <div className="assembly-page loading">
         <Loading size="large" />
@@ -233,7 +348,75 @@ export default function Assembly() {
     );
   }
 
-  // 显示需要先创建大纲的提示
+  // 显示大纲列表（当有可用大纲且没有选择特定草稿时）
+  if (showOutlineList && !draft && availableOutlines.length > 0) {
+    return (
+      <div className="assembly-page outline-list-page">
+        <Card className="outline-list-card">
+          <div className="outline-list-header">
+            <h2>选择大纲开始组装</h2>
+            <p className="outline-list-desc">
+              请选择一个已确认的大纲，系统将基于大纲内容智能匹配素材页面
+            </p>
+          </div>
+          <div className="outline-select-list">
+            {availableOutlines.map((outline) => (
+              <div
+                key={outline.id}
+                className={`outline-item ${outline.status === 'confirmed' ? 'completed' : 'draft'}`}
+                onClick={() => {
+                  console.log('Outline clicked:', outline.id, outline.title);
+                  handleSelectOutline(outline);
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                <div className="outline-item-content">
+                  <div className="outline-item-main">
+                    <h4 className="outline-item-title">{outline.title}</h4>
+                    <p className="outline-item-desc">
+                      {outline.chapters?.length || 0} 个章节
+                      {outline.updated_at && (
+                        <span className="outline-item-time">
+                          · 更新于 {new Date(outline.updated_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="outline-item-action">
+                    {outline.status === 'confirmed' ? (
+                      <Tag theme="success" variant="light">已确认</Tag>
+                    ) : (
+                      <Tag theme="warning" variant="light">草稿</Tag>
+                    )}
+                    <ChevronRightIcon className="outline-item-arrow" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="outline-list-footer">
+            <Space>
+              <Button 
+                variant="outline" 
+                icon={<ViewListIcon />}
+                onClick={handleGoToOutline}
+              >
+                管理大纲
+              </Button>
+              <Button 
+                variant="text"
+                onClick={createNewDraft}
+              >
+                跳过，直接创建空白PPT
+              </Button>
+            </Space>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // 显示需要先创建大纲的提示（没有任何大纲时）
   if (showOutlineRequired && !draft) {
     return (
       <div className="assembly-page empty">
@@ -304,6 +487,15 @@ export default function Assembly() {
           </div>
           <div className="header-right">
             <Space>
+              <Button
+                variant="outline"
+                icon={<RefreshIcon />}
+                loading={isAutoMatching}
+                onClick={() => handleAutoMatch()}
+                title="根据章节内容智能匹配素材页面"
+              >
+                智能匹配
+              </Button>
               <Button
                 variant="outline"
                 icon={<RollbackIcon />}
@@ -381,12 +573,13 @@ export default function Assembly() {
                       <h2>{chapter.title}</h2>
                       <p className="chapter-desc">{chapter.description}</p>
                       <div className="slides-grid">
-                        {chapter.pages.map((page) => (
+                        {chapter.pages.map((page, pageIndex) => (
                           <SlidePreview
                             key={page.slide_id}
                             page={page}
                             chapterId={chapter.id}
                             draftId={draftId!}
+                            pageIndex={pageIndex}
                             onRefresh={() => loadDraft(draftId!)}
                           />
                         ))}

@@ -32,6 +32,17 @@ from app.schemas import (
     ConfirmOutlineResponse,
     AutoSaveOutlineRequest,
     AutoSaveOutlineResponse,
+    # 新的向导式会话 Schema
+    CreateWizardSessionResponse,
+    WizardSessionStep1Data,
+    WizardSessionStep2Data,
+    WizardSessionStep3Data,
+    WizardSessionStep4Data,
+    SaveWizardStepResponse,
+    WizardSessionResponse,
+    CompleteWizardSessionResponse,
+    AISuggestionRequest,
+    AISuggestionResponse,
 )
 
 router = APIRouter()
@@ -688,3 +699,310 @@ async def auto_save_outline(
         success=True,
         saved_at=outline.updated_at
     )
+
+
+# ============== 新的向导式会话 API ==============
+
+# 内存中存储会话数据（生产环境应使用 Redis 或数据库）
+wizard_sessions: dict = {}
+
+
+@router.post("/wizard/sessions", response_model=CreateWizardSessionResponse, summary="创建向导会话")
+async def create_wizard_session(
+    user_id: str = Depends(get_current_user_id),
+):
+    """创建新的向导式生成会话"""
+    import uuid
+    from datetime import datetime
+    
+    session_id = str(uuid.uuid4())
+    now = datetime.utcnow()
+    
+    wizard_sessions[session_id] = {
+        "session_id": session_id,
+        "user_id": user_id,
+        "current_step": 1,
+        "step1_completed": False,
+        "step2_completed": False,
+        "step3_completed": False,
+        "step4_completed": False,
+        "step1_data": None,
+        "step2_data": None,
+        "step3_data": None,
+        "step4_data": None,
+        "chapter_ids": [],
+        "created_at": now,
+    }
+    
+    return CreateWizardSessionResponse(
+        session_id=session_id,
+        current_step=1,
+        created_at=now
+    )
+
+
+@router.get("/wizard/sessions/{session_id}", response_model=WizardSessionResponse, summary="获取向导会话状态")
+async def get_wizard_session(
+    session_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """获取向导会话的当前状态"""
+    session = wizard_sessions.get(session_id)
+    if not session or session["user_id"] != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="会话不存在"
+        )
+    
+    return WizardSessionResponse(
+        session_id=session["session_id"],
+        current_step=session["current_step"],
+        step1_completed=session["step1_completed"],
+        step2_completed=session["step2_completed"],
+        step3_completed=session["step3_completed"],
+        step4_completed=session["step4_completed"],
+        step1_data=session["step1_data"],
+        step2_data=session["step2_data"],
+        step3_data=session["step3_data"],
+        step4_data=session["step4_data"],
+        created_at=session["created_at"],
+    )
+
+
+@router.put("/wizard/sessions/{session_id}/step1", response_model=SaveWizardStepResponse, summary="保存向导步骤1")
+async def save_wizard_step1(
+    session_id: str,
+    data: WizardSessionStep1Data,
+    user_id: str = Depends(get_current_user_id),
+):
+    """保存向导步骤1数据：主题设定"""
+    session = wizard_sessions.get(session_id)
+    if not session or session["user_id"] != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="会话不存在"
+        )
+    
+    session["step1_data"] = data.model_dump()
+    session["step1_completed"] = True
+    session["current_step"] = 2
+    
+    return SaveWizardStepResponse(
+        success=True,
+        next_step=2,
+        message="步骤1保存成功"
+    )
+
+
+@router.put("/wizard/sessions/{session_id}/step2", response_model=SaveWizardStepResponse, summary="保存向导步骤2")
+async def save_wizard_step2(
+    session_id: str,
+    data: WizardSessionStep2Data,
+    user_id: str = Depends(get_current_user_id),
+):
+    """保存向导步骤2数据：章节规划"""
+    import uuid
+    
+    session = wizard_sessions.get(session_id)
+    if not session or session["user_id"] != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="会话不存在"
+        )
+    
+    # 为每个章节生成ID
+    chapter_ids = []
+    chapters_with_ids = []
+    for chapter in data.chapters:
+        chapter_id = str(uuid.uuid4())
+        chapter_ids.append(chapter_id)
+        chapters_with_ids.append({
+            **chapter,
+            "id": chapter_id,
+        })
+    
+    session["step2_data"] = {"chapters": chapters_with_ids}
+    session["chapter_ids"] = chapter_ids
+    session["step2_completed"] = True
+    session["current_step"] = 3
+    
+    return SaveWizardStepResponse(
+        success=True,
+        next_step=3,
+        message="步骤2保存成功",
+        chapter_ids=chapter_ids
+    )
+
+
+@router.put("/wizard/sessions/{session_id}/step3", response_model=SaveWizardStepResponse, summary="保存向导步骤3")
+async def save_wizard_step3(
+    session_id: str,
+    data: WizardSessionStep3Data,
+    user_id: str = Depends(get_current_user_id),
+):
+    """保存向导步骤3数据：内容摘要"""
+    session = wizard_sessions.get(session_id)
+    if not session or session["user_id"] != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="会话不存在"
+        )
+    
+    session["step3_data"] = data.model_dump()
+    session["step3_completed"] = True
+    session["current_step"] = 4
+    
+    return SaveWizardStepResponse(
+        success=True,
+        next_step=4,
+        message="步骤3保存成功"
+    )
+
+
+@router.put("/wizard/sessions/{session_id}/step4", response_model=SaveWizardStepResponse, summary="保存向导步骤4")
+async def save_wizard_step4(
+    session_id: str,
+    data: WizardSessionStep4Data,
+    user_id: str = Depends(get_current_user_id),
+):
+    """保存向导步骤4数据：风格选择"""
+    session = wizard_sessions.get(session_id)
+    if not session or session["user_id"] != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="会话不存在"
+        )
+    
+    session["step4_data"] = data.model_dump()
+    session["step4_completed"] = True
+    
+    return SaveWizardStepResponse(
+        success=True,
+        next_step=4,
+        message="步骤4保存成功"
+    )
+
+
+@router.post("/wizard/sessions/{session_id}/complete", response_model=CompleteWizardSessionResponse, summary="完成向导生成大纲")
+async def complete_wizard_session(
+    session_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """完成向导，生成大纲"""
+    import uuid
+    from datetime import datetime
+    
+    session = wizard_sessions.get(session_id)
+    if not session or session["user_id"] != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="会话不存在"
+        )
+    
+    if not session["step1_completed"] or not session["step2_completed"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请先完成所有必要步骤"
+        )
+    
+    step1_data = session["step1_data"]
+    step2_data = session["step2_data"]
+    step3_data = session.get("step3_data", {})
+    
+    # 创建大纲
+    outline = Outline(
+        title=step1_data.get("title", "向导生成的大纲"),
+        description=step1_data.get("objective", ""),
+        generation_mode=OutlineGenerationMode.WIZARD,
+        generation_config={
+            "session_id": session_id,
+            "target_audience": step1_data.get("target_audience"),
+            "duration": step1_data.get("duration"),
+        },
+        owner_id=user_id,
+    )
+    db.add(outline)
+    db.commit()
+    db.refresh(outline)
+    
+    # 创建章节
+    chapters_data = step2_data.get("chapters", [])
+    step3_chapters = {ch.get("chapter_id"): ch for ch in step3_data.get("chapters", [])} if step3_data else {}
+    
+    for idx, chapter_data in enumerate(chapters_data):
+        chapter_id = chapter_data.get("id", str(uuid.uuid4()))
+        step3_ch = step3_chapters.get(chapter_id, {})
+        
+        section = OutlineSection(
+            outline_id=outline.id,
+            title=chapter_data.get("title", f"章节 {idx + 1}"),
+            description=step3_ch.get("summary", ""),
+            expected_pages=chapter_data.get("page_count", 1),
+            order_index=idx,
+            level=1,
+        )
+        db.add(section)
+        outline.section_count += 1
+    
+    db.commit()
+    db.refresh(outline)
+    
+    # 获取所有章节
+    sections = db.query(OutlineSection).filter(
+        OutlineSection.outline_id == outline.id
+    ).order_by(OutlineSection.order_index).all()
+    
+    # 构建前端需要的响应格式
+    chapters = []
+    total_pages = 0
+    for idx, s in enumerate(sections):
+        chapter_id = session["chapter_ids"][idx] if idx < len(session.get("chapter_ids", [])) else str(uuid.uuid4())
+        step3_ch = step3_chapters.get(chapter_id, {})
+        
+        chapters.append({
+            "id": s.id,
+            "title": s.title,
+            "summary": s.description or step3_ch.get("summary", ""),
+            "page_count": s.expected_pages,
+            "order": idx + 1,
+            "keywords": step3_ch.get("keywords", []),
+        })
+        total_pages += s.expected_pages
+    
+    outline_data = {
+        "id": outline.id,
+        "title": outline.title,
+        "objective": outline.description,
+        "target_audience": step1_data.get("target_audience"),
+        "duration": step1_data.get("duration"),
+        "generation_type": "wizard",
+        "status": "draft",
+        "chapters": chapters,
+        "total_pages": total_pages,
+        "created_at": outline.created_at.isoformat(),
+        "updated_at": outline.updated_at.isoformat(),
+        "user_id": user_id,
+    }
+    
+    # 清理会话
+    del wizard_sessions[session_id]
+    
+    return CompleteWizardSessionResponse(
+        outline=outline_data,
+        message="大纲生成成功"
+    )
+
+
+@router.post("/wizard/ai-suggestion", response_model=AISuggestionResponse, summary="获取AI内容建议")
+async def get_ai_suggestion(
+    request: AISuggestionRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    """获取AI内容建议"""
+    # TODO: 调用 LLM 生成建议
+    # 这里先返回模拟数据
+    
+    suggestion = f"根据章节「{request.chapter_title}」和PPT目标「{request.ppt_objective}」，建议本章节重点介绍以下内容：核心概念、关键要点、实际应用案例。可以从背景介绍开始，逐步深入到具体细节。"
+    
+    return AISuggestionResponse(suggestion=suggestion)

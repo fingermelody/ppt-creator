@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     CHROMA_HOST: str = "localhost"
     CHROMA_PORT: int = 8001
     CHROMA_COLLECTION: str = "ppt_slides"
+    CHROMA_USE_LOCAL: bool = True  # 使用本地持久化模式
+    CHROMA_PERSIST_DIR: str = "./data/chromadb"  # 本地数据存储目录
     
     # ============== 文件存储配置 ==============
     UPLOAD_DIR: str = "/data/uploads"

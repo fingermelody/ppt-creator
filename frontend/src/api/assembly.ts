@@ -220,14 +220,29 @@ export const assemblyApi = {
   },
 
   // 获取草稿列表
-  getDrafts: async (page = 1, limit = 20, status?: string) => {
+  getDrafts: async (page = 1, limit = 20, status?: string, outlineId?: string) => {
+    const params: any = { page, limit };
+    if (status) params.status = status;
+    if (outlineId) params.outline_id = outlineId;
+    
     const response = await apiClient.get<{ drafts: BackendDraftDetail[], total: number }>('/api/drafts', {
-      params: { page, limit, status },
+      params,
     });
     return {
       drafts: response.drafts.map(d => convertBackendDraftToFrontend(d).draft),
       total: response.total,
     } as DraftListResponse;
+  },
+
+  // 根据大纲ID查找草稿
+  getDraftByOutlineId: async (outlineId: string) => {
+    const response = await apiClient.get<{ drafts: BackendDraftDetail[], total: number }>('/api/drafts', {
+      params: { outline_id: outlineId },
+    });
+    if (response.drafts && response.drafts.length > 0) {
+      return convertBackendDraftToFrontend(response.drafts[0]);
+    }
+    return null;
   },
 
   // 获取草稿详情
@@ -263,6 +278,44 @@ export const assemblyApi = {
     return apiClient.post<{ download_url: string; file_size: number; file_name: string; exported_at: string }>(
       `/api/drafts/${draftId}/preview`
     );
+  },
+
+  // 自动匹配页面
+  autoMatchPages: async (draftId: string) => {
+    return apiClient.post<{
+      success: boolean;
+      message: string;
+      matched_count: number;
+      recommendations: Record<string, Array<{
+        slide_id: string;
+        document_id: string;
+        page_number: number;
+        title: string;
+        content_summary: string;
+        thumbnail_path: string | null;
+        similarity: number;
+      }>>;
+    }>(`/api/assembly/drafts/${draftId}/auto-match`);
+  },
+
+  // 获取章节推荐页面
+  getSectionRecommendations: async (sectionId: string, limit = 10) => {
+    return apiClient.get<{
+      section_id: string;
+      section_title: string;
+      recommendations: Array<{
+        slide_id: string;
+        document_id: string;
+        page_number: number;
+        title: string;
+        content_summary: string;
+        thumbnail_path: string | null;
+        similarity: number;
+      }>;
+      total: number;
+    }>(`/api/assembly/sections/${sectionId}/recommendations`, {
+      params: { limit }
+    });
   },
 
   // 添加页面（使用草稿 API）

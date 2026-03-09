@@ -64,6 +64,16 @@
   max-width: 150px;
 }
 
+.page-subtitle {
+  margin: 0;
+  font-size: 11px;
+  color: #999;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+
 .page-meta {
   display: flex;
   align-items: center;

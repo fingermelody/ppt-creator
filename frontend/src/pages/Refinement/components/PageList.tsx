@@ -23,7 +23,14 @@ export default function PageList({ pages, currentPageIndex, onPageSelect }: Page
                 <span className="page-number">{page.page_index + 1}</span>
               </div>
               <div className="page-info">
-                <span className="page-title">{page.title || `页面 ${page.page_index + 1}`}</span>
+                {/* 优先显示章节标题，其次显示页面标题 */}
+                <span className="page-title">
+                  {page.section_title || page.title || `页面 ${page.page_index + 1}`}
+                </span>
+                {/* 如果有章节标题且页面标题不同，显示页面标题作为副标题 */}
+                {page.section_title && page.title && page.section_title !== page.title && (
+                  <span className="page-subtitle">{page.title}</span>
+                )}
                 <div className="page-meta">
                   {(page.modification_count ?? 0) > 0 && (
                     <Badge count={page.modification_count} />

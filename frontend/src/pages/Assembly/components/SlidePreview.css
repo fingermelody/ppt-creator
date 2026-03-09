@@ -22,6 +22,116 @@
   object-fit: cover;
 }
 
+/* 占位符样式 - 基础 */
+.slide-placeholder {
+  width: 100%;
+  height: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  gap: 8px;
+}
+
+/* 增强版占位符样式 */
+.slide-placeholder.enhanced {
+  position: relative;
+  padding: 16px;
+  gap: 0;
+}
+
+.slide-placeholder.enhanced .placeholder-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+}
+
+.slide-placeholder.enhanced .page-index-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.slide-placeholder.enhanced .placeholder-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.slide-placeholder.enhanced .placeholder-summary {
+  font-size: 11px;
+  opacity: 0.85;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+  margin-top: 4px;
+}
+
+.slide-placeholder .placeholder-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  padding: 0 16px;
+}
+
+.slide-placeholder .page-title {
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.slide-placeholder .page-num {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.slide-placeholder .no-match {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+/* 未匹配的页面样式 */
+.slide-preview.unmatched .slide-placeholder {
+  background: linear-gradient(135deg, #a8a8a8 0%, #666666 100%);
+}
+
+.slide-preview.unmatched .t-card {
+  border: 2px dashed #ccc;
+}
+
 .slide-info {
   padding: 8px 0;
 }

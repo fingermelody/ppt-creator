@@ -38,7 +38,10 @@ async def create_draft(
     user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
-    """创建新草稿"""
+    """创建新草稿
+    
+    如果指定了 outline_id，会自动根据大纲的章节创建对应的草稿页面
+    """
     draft = Draft(
         title=request.title,
         description=request.description,
@@ -46,6 +49,30 @@ async def create_draft(
         owner_id=user_id,
     )
     db.add(draft)
+    db.flush()  # 获取 draft.id
+    
+    # 如果关联了大纲，自动根据章节创建草稿页面
+    if request.outline_id:
+        sections = db.query(OutlineSection).filter(
+            OutlineSection.outline_id == request.outline_id
+        ).order_by(OutlineSection.order_index).all()
+        
+        page_order = 0
+        for section in sections:
+            # 为每个章节创建期望数量的页面
+            expected_pages = section.expected_pages or 1
+            for i in range(expected_pages):
+                page = DraftPage(
+                    draft_id=draft.id,
+                    section_id=section.id,
+                    title=f"{section.title} - 第{i+1}页",
+                    order_index=page_order,
+                )
+                db.add(page)
+                page_order += 1
+        
+        logger.info(f"Created {page_order} draft pages for draft {draft.id} from outline {request.outline_id}")
+    
     db.commit()
     db.refresh(draft)
     
@@ -57,6 +84,7 @@ async def get_drafts(
     page: int = 1,
     limit: int = 20,
     status: Optional[DraftStatus] = None,
+    outline_id: Optional[str] = None,
     user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
@@ -68,6 +96,9 @@ async def get_drafts(
     
     if status:
         query = query.filter(Draft.status == status)
+    
+    if outline_id:
+        query = query.filter(Draft.outline_id == outline_id)
     
     total = query.count()
     drafts = query.order_by(Draft.updated_at.desc()) \

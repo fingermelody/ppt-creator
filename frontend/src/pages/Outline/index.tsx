@@ -54,7 +54,8 @@ export default function Outline() {
   const loadOutlines = async () => {
     setLoading(true);
     try {
-      const response = await outlineApi.getOutlines({ status: 'draft' });
+      // 获取所有大纲（包括 draft 和 completed 状态）
+      const response = await outlineApi.getOutlines({});
       setOutlines(response.outlines);
     } catch (error) {
       console.error('Failed to load outlines:', error);
@@ -171,6 +172,20 @@ export default function Outline() {
     }
   };
 
+  // 跳转到组装页面
+  const handleGoToAssembly = async (outline: PPTOutline) => {
+    try {
+      // 检查是否已有关联的草稿
+      const response = await outlineApi.confirmOutline(outline.id);
+      navigate(`/assembly/${response.assembly_draft_id}?outline=${outline.id}`);
+    } catch (error: any) {
+      // 如果大纲已经确认过，直接用 outline_id 查找草稿
+      console.warn('Outline might already be confirmed, trying to find existing draft');
+      // 直接跳转到组装页面，让它查找已有的草稿
+      navigate(`/assembly?outline=${outline.id}`);
+    }
+  };
+
   return (
     <div className="outline-page">
       <div className="outline-header">
@@ -247,7 +262,7 @@ export default function Outline() {
                     <div className="draft-info">
                       <div className="draft-title">{outline.title || '未命名大纲'}</div>
                       <div className="draft-meta">
-                        <span>{outline.chapters.length}个章节</span>
+                        <span>{outline.chapters?.length || outline.total_pages || 0}个章节</span>
                         <span>·</span>
                         <span>{outline.total_pages}页</span>
                       </div>
@@ -256,18 +271,38 @@ export default function Outline() {
                       <Tag size="small" theme={outline.generation_type === 'smart' ? 'primary' : 'default'}>
                         {outline.generation_type === 'smart' ? '智能生成' : '向导式'}
                       </Tag>
+                      {outline.status === 'confirmed' || outline.status === 'completed' ? (
+                        <Tag size="small" theme="success">已确认</Tag>
+                      ) : (
+                        <Tag size="small" theme="warning">草稿</Tag>
+                      )}
                     </div>
-                    <Button
-                      variant="text"
-                      theme="danger"
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteOutline(outline.id);
-                      }}
-                    >
-                      删除
-                    </Button>
+                    <Space size="small">
+                      {(outline.status === 'confirmed' || outline.status === 'completed') && (
+                        <Button
+                          variant="text"
+                          theme="primary"
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleGoToAssembly(outline);
+                          }}
+                        >
+                          组装
+                        </Button>
+                      )}
+                      <Button
+                        variant="text"
+                        theme="danger"
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteOutline(outline.id);
+                        }}
+                      >
+                        删除
+                      </Button>
+                    </Space>
                   </div>
                 ))}
               </div>

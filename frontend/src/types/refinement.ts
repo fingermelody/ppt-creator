@@ -17,6 +17,8 @@ export interface RefinedPage {
   page_index: number;
   slide_id?: string;
   title?: string;
+  section_id?: string;  // 关联的大纲章节ID
+  section_title?: string;  // 关联的大纲章节标题
   source_document_id?: string;
   source_page_number?: number;
   current_content?: SlideContent;
