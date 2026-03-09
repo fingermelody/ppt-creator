@@ -106,10 +106,16 @@ async def create_task(request: CreateTaskRequest, user_id: str = Depends(get_cur
     
     # 为每个草稿页面创建对应的精修页面
     for index, draft_page in enumerate(draft_pages):
+        # 如果页面有关联章节，使用章节标题；否则使用页面标题
+        page_title = draft_page.title
+        if draft_page.section_id and draft_page.section:
+            page_title = draft_page.section.title
+        
         refined_page = RefinedPage(
             task_id=task.id,
             page_index=index,
-            title=draft_page.title,
+            title=page_title,
+            section_id=draft_page.section_id,  # 传递章节关联
             thumbnail_path=draft_page.thumbnail_path,
             content={},  # 初始内容为空
             elements=[],  # 初始元素为空
@@ -140,7 +146,17 @@ async def get_task(task_id: str, user_id: str = Depends(get_current_user_id), db
         raise HTTPException(status_code=404, detail="任务不存在")
     pages = db.query(RefinedPage).filter(RefinedPage.task_id == task_id).order_by(RefinedPage.page_index).all()
     response = RefinementTaskDetailResponse.model_validate(task)
-    response.pages = [RefinedPageResponse.model_validate(p) for p in pages]
+    
+    # 构建页面响应，包含章节标题
+    page_responses = []
+    for p in pages:
+        page_dict = RefinedPageResponse.model_validate(p).model_dump()
+        # 如果页面有关联章节，获取章节标题
+        if p.section_id and p.section:
+            page_dict['section_title'] = p.section.title
+        page_responses.append(RefinedPageResponse(**page_dict))
+    
+    response.pages = page_responses
     return response
 
 

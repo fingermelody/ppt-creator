@@ -47,6 +47,8 @@ class RefinedPageResponse(BaseModel):
     id: str
     page_index: int
     title: Optional[str] = None
+    section_id: Optional[str] = None
+    section_title: Optional[str] = None  # 关联的大纲章节标题
     thumbnail_path: Optional[str] = None
     elements: Optional[List[ElementResponse]] = None
     

@@ -179,3 +179,77 @@ class AutoSaveOutlineResponse(BaseModel):
     """自动保存大纲响应"""
     success: bool = True
     saved_at: datetime
+
+
+# ============== 新的向导式会话 API Schema ==============
+
+class CreateWizardSessionResponse(BaseModel):
+    """创建向导会话响应"""
+    session_id: str
+    current_step: int = 1
+    created_at: datetime
+
+
+class WizardSessionStep1Data(BaseModel):
+    """向导步骤1数据"""
+    title: str
+    objective: str
+    target_audience: Optional[str] = None
+    duration: Optional[str] = None
+    custom_duration: Optional[int] = None
+
+
+class WizardSessionStep2Data(BaseModel):
+    """向导步骤2数据"""
+    chapters: List[dict]
+
+
+class WizardSessionStep3Data(BaseModel):
+    """向导步骤3数据"""
+    chapters: List[dict]
+
+
+class WizardSessionStep4Data(BaseModel):
+    """向导步骤4数据"""
+    style_template_id: Optional[str] = None
+    skip_style: bool = True
+
+
+class SaveWizardStepResponse(BaseModel):
+    """保存向导步骤响应"""
+    success: bool = True
+    next_step: int
+    message: str
+    chapter_ids: Optional[List[str]] = None
+
+
+class WizardSessionResponse(BaseModel):
+    """向导会话响应"""
+    session_id: str
+    current_step: int
+    step1_completed: bool
+    step2_completed: bool
+    step3_completed: bool
+    step4_completed: bool
+    step1_data: Optional[dict] = None
+    step2_data: Optional[dict] = None
+    step3_data: Optional[dict] = None
+    step4_data: Optional[dict] = None
+    created_at: datetime
+
+
+class CompleteWizardSessionResponse(BaseModel):
+    """完成向导响应"""
+    outline: dict  # PPTOutline 对象
+    message: str = "大纲生成成功"
+
+
+class AISuggestionRequest(BaseModel):
+    """AI建议请求"""
+    chapter_title: str
+    ppt_objective: str
+
+
+class AISuggestionResponse(BaseModel):
+    """AI建议响应"""
+    suggestion: str

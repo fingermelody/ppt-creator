@@ -75,3 +75,12 @@ backend.zip
 backend/deploy.zip
 backend/layer.zip
 *.zip
+
+# ChromaDB 向量数据库文件
+backend/data/chromadb/
+
+# 上传的文件
+backend/uploads/
+
+# 测试文件
+test_*.py

@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.core import get_current_user_id
 from app.models import Slide, OutlineSection, Document
+from app.models.draft import Draft, DraftPage
 from app.schemas import SlideResponse, SlideDetailResponse
+from app.services.slide_recommendation import get_slide_recommendation_service
 
 router = APIRouter()
 
@@ -30,23 +32,17 @@ async def search_slides(
     - **limit**: 返回结果数量
     - **document_ids**: 可选，限定在特定文档中搜索
     """
-    # TODO: 调用向量数据库进行语义搜索
-    # 目前使用简单的关键词搜索作为占位
+    doc_id_list = document_ids.split(",") if document_ids else None
     
-    doc_ids = document_ids.split(",") if document_ids else None
-    
-    db_query = db.query(Slide).join(Document).filter(
-        Document.owner_id == user_id,
-        Document.is_deleted == False
+    # 使用推荐服务搜索
+    recommendation_service = get_slide_recommendation_service()
+    slides = recommendation_service.search_slides_by_keywords(
+        db=db,
+        query=query,
+        user_id=user_id,
+        limit=limit,
+        document_ids=doc_id_list
     )
-    
-    if doc_ids:
-        db_query = db_query.filter(Slide.document_id.in_(doc_ids))
-    
-    # 简单关键词匹配
-    db_query = db_query.filter(Slide.content_text.ilike(f"%{query}%"))
-    
-    slides = db_query.limit(limit).all()
     
     return {
         "slides": [SlideResponse.model_validate(s) for s in slides],
@@ -77,23 +73,112 @@ async def get_section_recommendations(
             detail="章节不存在"
         )
     
-    # TODO: 使用章节信息进行语义搜索
-    # 构建搜索查询
-    search_query = f"{section.title} {section.description or ''} {section.content_hint or ''}"
-    
-    # 调用向量搜索
-    # 目前使用简单的关键词搜索作为占位
-    slides = db.query(Slide).join(Document).filter(
-        Document.owner_id == user_id,
-        Document.is_deleted == False,
-        Slide.content_text.ilike(f"%{section.title}%")
-    ).limit(limit).all()
+    # 使用推荐服务
+    recommendation_service = get_slide_recommendation_service()
+    recommendations = recommendation_service.recommend_slides_for_section(
+        db=db,
+        section_title=section.title,
+        section_description=section.description,
+        user_id=user_id,
+        limit=limit
+    )
     
     return {
         "section_id": section_id,
         "section_title": section.title,
-        "recommendations": [SlideResponse.model_validate(s) for s in slides],
-        "total": len(slides)
+        "recommendations": recommendations,
+        "total": len(recommendations)
+    }
+
+
+@router.post("/drafts/{draft_id}/auto-match", summary="为草稿自动匹配页面")
+async def auto_match_draft_pages(
+    draft_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """
+    为草稿的所有章节自动匹配推荐页面
+    
+    根据章节的标题和描述，从素材库中检索最相关的页面，
+    并将推荐的页面关联到草稿页面
+    """
+    # 获取草稿
+    draft = db.query(Draft).filter(
+        Draft.id == draft_id,
+        Draft.owner_id == user_id,
+        Draft.is_deleted == False
+    ).first()
+    
+    if not draft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="草稿不存在"
+        )
+    
+    if not draft.outline_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="草稿没有关联大纲，无法自动匹配"
+        )
+    
+    # 获取章节信息
+    sections = db.query(OutlineSection).filter(
+        OutlineSection.outline_id == draft.outline_id
+    ).order_by(OutlineSection.order_index).all()
+    
+    if not sections:
+        return {
+            "success": True,
+            "message": "没有章节需要匹配",
+            "matched_count": 0
+        }
+    
+    # 使用推荐服务批量推荐
+    recommendation_service = get_slide_recommendation_service()
+    sections_data = [
+        {
+            "id": s.id,
+            "title": s.title,
+            "description": s.description,
+            "expected_pages": s.expected_pages or 1
+        }
+        for s in sections
+    ]
+    
+    recommendations = recommendation_service.batch_recommend_for_draft(
+        db=db,
+        draft_id=draft_id,
+        sections=sections_data,
+        user_id=user_id
+    )
+    
+    # 更新草稿页面
+    matched_count = 0
+    for section_id, section_recs in recommendations.items():
+        # 获取该章节的草稿页面
+        section_pages = db.query(DraftPage).filter(
+            DraftPage.draft_id == draft_id,
+            DraftPage.section_id == section_id,
+            DraftPage.source_slide_id == None  # 只更新未绑定的页面
+        ).order_by(DraftPage.order_index).all()
+        
+        # 将推荐的页面绑定到草稿页面
+        for i, page in enumerate(section_pages):
+            if i < len(section_recs):
+                rec = section_recs[i]
+                page.source_slide_id = rec["slide_id"]
+                page.thumbnail_path = rec.get("thumbnail_path")
+                page.title = rec.get("title") or page.title
+                matched_count += 1
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": f"成功匹配 {matched_count} 个页面",
+        "matched_count": matched_count,
+        "recommendations": recommendations
     }
 
 
@@ -139,16 +224,24 @@ async def get_similar_slides(
             detail="页面不存在"
         )
     
-    # TODO: 使用向量相似度搜索
-    # 目前返回同文档的其他页面作为占位
-    similar_slides = db.query(Slide).filter(
-        Slide.document_id == slide.document_id,
-        Slide.id != slide_id
-    ).limit(limit).all()
+    # 使用页面的标题和内容搜索相似页面
+    recommendation_service = get_slide_recommendation_service()
+    search_query = f"{slide.title or ''} {slide.content_text or ''}"[:500]
+    
+    recommendations = recommendation_service.recommend_slides_for_section(
+        db=db,
+        section_title=slide.title or "",
+        section_description=slide.content_text or "",
+        user_id=user_id,
+        limit=limit + 1  # 多取一个，排除自身
+    )
+    
+    # 过滤掉自身
+    similar_slides = [r for r in recommendations if r["slide_id"] != slide_id][:limit]
     
     return {
         "source_slide_id": slide_id,
-        "similar_slides": [SlideResponse.model_validate(s) for s in similar_slides]
+        "similar_slides": similar_slides
     }
 
 

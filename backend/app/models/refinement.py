@@ -83,6 +83,10 @@ class RefinedPage(BaseModel):
     page_index = Column(Integer, nullable=False)
     title = Column(String(500), nullable=True)
     
+    # 关联章节（从草稿页面继承）
+    section_id = Column(String(36), ForeignKey("outline_sections.id"), nullable=True, index=True)
+    section = relationship("OutlineSection")
+    
     # 页面内容（当前状态）
     content = Column(JSON, nullable=True)
     elements = Column(JSON, nullable=True)
