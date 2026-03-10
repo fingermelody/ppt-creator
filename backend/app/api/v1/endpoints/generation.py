@@ -14,7 +14,7 @@ from app.models import (
     GenerationTask,
     GeneratedPage,
     WebSource,
-    PPTTemplate,
+    Template,
     GenerationStatus,
     SearchDepth,
 )
@@ -50,15 +50,15 @@ async def get_templates(
     db: Session = Depends(get_db)
 ):
     """获取 PPT 模板列表"""
-    query = db.query(PPTTemplate)
+    query = db.query(Template)
     
     if category:
-        query = query.filter(PPTTemplate.category == category)
+        query = query.filter(Template.category == category)
     
-    templates = query.order_by(PPTTemplate.usage_count.desc()).all()
+    templates = query.order_by(Template.use_count.desc()).all()
     
     # 获取所有分类
-    categories = db.query(PPTTemplate.category).distinct().all()
+    categories = db.query(Template.category).distinct().all()
     categories = [c[0] for c in categories]
     
     return TemplateListResponse(
@@ -74,7 +74,7 @@ async def get_template(
     db: Session = Depends(get_db)
 ):
     """获取模板详情"""
-    template = db.query(PPTTemplate).filter(PPTTemplate.id == template_id).first()
+    template = db.query(Template).filter(Template.id == template_id).first()
     
     if not template:
         raise HTTPException(
@@ -95,7 +95,7 @@ async def upload_template(
     # TODO: 实现文件保存和预览生成
     import uuid
     
-    template = PPTTemplate(
+    template = Template(
         name=file.filename.rsplit(".", 1)[0] if file.filename else "自定义模板",
         category="custom",
         file_path=f"/data/templates/{uuid.uuid4()}.pptx",
@@ -120,10 +120,10 @@ async def delete_template(
     db: Session = Depends(get_db)
 ):
     """删除自定义模板"""
-    template = db.query(PPTTemplate).filter(
-        PPTTemplate.id == template_id,
-        PPTTemplate.owner_id == user_id,
-        PPTTemplate.is_custom == 1
+    template = db.query(Template).filter(
+        Template.id == template_id,
+        Template.owner_id == user_id,
+        Template.is_custom == 1
     ).first()
     
     if not template:

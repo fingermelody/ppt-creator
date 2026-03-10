@@ -10,7 +10,7 @@ from app.models import (
     Document, Slide,
     Outline, OutlineSection,
     Draft, DraftPage,
-    GenerationTask, GeneratedPage, WebSource, PPTTemplate,
+    GenerationTask, GeneratedPage, WebSource,
     RefinementTask, RefinedPage, PageModification, RefinementConversation, RefinementMessage,
 )
 
