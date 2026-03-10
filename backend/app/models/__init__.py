@@ -11,7 +11,6 @@ from app.models.generation import (
     GenerationTask,
     GeneratedPage,
     WebSource,
-    PPTTemplate,
     GenerationStatus,
     SearchDepth,
 )
@@ -23,6 +22,30 @@ from app.models.refinement import (
     RefinementMessage,
     RefinementStatus,
     ModificationAction,
+)
+from app.models.version import (
+    VersionHistory,
+    VersionComparison,
+    VersionType,
+)
+from app.models.template import (
+    Template,
+    TemplatePage,
+    TemplateUsage,
+    UserFavoriteTemplate,
+    TemplateCategory,
+    TemplateStatus,
+)
+from app.models.image import (
+    ImageRecommendation,
+    ImageLibrary,
+    ImageUsage,
+    ImageSource,
+    ImageCategory,
+)
+from app.services.large_file import (
+    ChunkedUpload,
+    UploadStatus,
 )
 
 __all__ = [
@@ -50,7 +73,6 @@ __all__ = [
     "GenerationTask",
     "GeneratedPage",
     "WebSource",
-    "PPTTemplate",
     "GenerationStatus",
     "SearchDepth",
     # 精修
@@ -61,4 +83,24 @@ __all__ = [
     "RefinementMessage",
     "RefinementStatus",
     "ModificationAction",
+    # 版本历史
+    "VersionHistory",
+    "VersionComparison",
+    "VersionType",
+    # 模板系统
+    "Template",
+    "TemplatePage",
+    "TemplateUsage",
+    "UserFavoriteTemplate",
+    "TemplateCategory",
+    "TemplateStatus",
+    # 图片推荐
+    "ImageRecommendation",
+    "ImageLibrary",
+    "ImageUsage",
+    "ImageSource",
+    "ImageCategory",
+    # 大文件处理
+    "ChunkedUpload",
+    "UploadStatus",
 ]

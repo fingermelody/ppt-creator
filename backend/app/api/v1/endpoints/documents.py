@@ -504,6 +504,35 @@ async def search_similar_slides(
     }
 
 
+@router.get("/search", response_model=DocumentListResponse, summary="搜索文档")
+async def search_documents(
+    query: str,
+    page: int = 1,
+    limit: int = 20,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """搜索文档"""
+    db_query = db.query(Document).filter(
+        Document.owner_id == user_id,
+        Document.is_deleted == False,
+        Document.original_filename.ilike(f"%{query}%")
+    )
+    
+    total = db_query.count()
+    documents = db_query.order_by(Document.created_at.desc()) \
+        .offset((page - 1) * limit) \
+        .limit(limit) \
+        .all()
+    
+    return DocumentListResponse(
+        documents=[DocumentResponse.model_validate(doc) for doc in documents],
+        total=total,
+        page=page,
+        limit=limit
+    )
+
+
 @router.get("/{document_id}", response_model=DocumentDetailResponse, summary="获取文档详情")
 async def get_document(
     document_id: str,
@@ -683,6 +712,102 @@ async def get_document_slides(
     slides = db.query(Slide).filter(Slide.document_id == document_id) \
         .order_by(Slide.page_number).all()
     
+    return {
+        "document_id": document_id,
+        "slides": [
+            {
+                "id": slide.id,
+                "page_number": slide.page_number,
+                "title": slide.title,
+                "content": slide.content_text,  # 使用content_text属性
+                "thumbnail_url": slide.thumbnail_url,
+            }
+            for slide in slides
+        ],
+        "total": len(slides)
+    }
+
+
+@router.post("/{document_id}/slides/search", summary="文档内页面语义检索")
+async def search_document_slides(
+    document_id: str,
+    request: dict,  # 改为接收JSON body
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """
+    在指定文档内进行页面级语义检索
+    
+    Request body:
+    - **query**: 搜索查询文本
+    - **n_results**: 返回结果数量（默认10）
+    """
+    from app.services.vectorization import get_vectorization_service
+    
+    # 提取参数
+    query = request.get("query", "")
+    n_results = request.get("n_results", 10)
+    
+    # 验证文档权限
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.owner_id == user_id,
+        Document.is_deleted == False
+    ).first()
+    
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文档不存在"
+        )
+    
+    if not query or not query.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="搜索文本不能为空"
+        )
+    
+    try:
+        # 获取向量化服务
+        vector_service = get_vectorization_service()
+        
+        # 在文档范围内搜索
+        results = vector_service.search_similar(
+            query_text=query.strip(),
+            n_results=n_results,
+            document_id=document_id
+        )
+        
+        # 格式化结果
+        formatted_results = []
+        for result in results:
+            slide = db.query(Slide).filter(Slide.id == result["slide_id"]).first()
+            if slide:
+                formatted_results.append({
+                    "slide_id": slide.id,
+                    "page_number": slide.page_number,
+                    "title": slide.title,
+                    "content": slide.content_text,
+                    "thumbnail_url": slide.thumbnail_url,
+                    "similarity": result.get("similarity", 0.0),
+                    "source_url": document.cos_url,
+                    "source_filename": document.original_filename,
+                })
+        
+        return {
+            "document_id": document_id,
+            "query": query,
+            "results": formatted_results,
+            "total": len(formatted_results)
+        }
+        
+    except Exception as e:
+        logger.error(f"页面检索失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"检索失败: {str(e)}"
+        )
+    
     return {"slides": [SlideResponse.model_validate(s) for s in slides]}
 
 
@@ -713,30 +838,3 @@ async def delete_document(
     return {"success": True}
 
 
-@router.get("/search", response_model=DocumentListResponse, summary="搜索文档")
-async def search_documents(
-    query: str,
-    page: int = 1,
-    limit: int = 20,
-    user_id: str = Depends(get_current_user_id),
-    db: Session = Depends(get_db)
-):
-    """搜索文档"""
-    db_query = db.query(Document).filter(
-        Document.owner_id == user_id,
-        Document.is_deleted == False,
-        Document.original_filename.ilike(f"%{query}%")
-    )
-    
-    total = db_query.count()
-    documents = db_query.order_by(Document.created_at.desc()) \
-        .offset((page - 1) * limit) \
-        .limit(limit) \
-        .all()
-    
-    return DocumentListResponse(
-        documents=[DocumentResponse.model_validate(doc) for doc in documents],
-        total=total,
-        page=page,
-        limit=limit
-    )

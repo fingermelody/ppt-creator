@@ -49,7 +49,7 @@ class GenerationTask(BaseModel, SoftDeleteMixin):
     
     # 模板/风格
     template_id = Column(String(36), ForeignKey("ppt_templates.id"), nullable=True)
-    template = relationship("PPTTemplate")
+    template = relationship("Template")
     custom_style_path = Column(String(500), nullable=True)  # 自定义风格文件路径
     
     # 状态
@@ -136,31 +136,3 @@ class WebSource(BaseModel):
     # 是否被使用
     is_used = Column(Integer, default=0, nullable=False)
 
-
-class PPTTemplate(BaseModel):
-    """PPT 模板表"""
-    __tablename__ = "ppt_templates"
-    
-    # 模板信息
-    name = Column(String(100), nullable=False)
-    description = Column(Text, nullable=True)
-    category = Column(String(50), nullable=False)  # business, education, technology, etc.
-    
-    # 文件路径
-    file_path = Column(String(500), nullable=False)
-    preview_url = Column(String(500), nullable=True)
-    thumbnail_url = Column(String(500), nullable=True)
-    
-    # 配色方案
-    color_scheme = Column(JSON, nullable=True)
-    font_family = Column(String(100), nullable=True)
-    
-    # 状态
-    is_premium = Column(Integer, default=0, nullable=False)
-    is_custom = Column(Integer, default=0, nullable=False)  # 是否为用户自定义
-    
-    # 使用统计
-    usage_count = Column(Integer, default=0, nullable=False)
-    
-    # 所属用户（自定义模板）
-    owner_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
