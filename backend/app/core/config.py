@@ -53,7 +53,27 @@ class Settings(BaseSettings):
     )
     REDIS_PREFIX: str = "ppt_rsd:"
     
-    # ============== ChromaDB 配置 ==============
+    # ============== Elasticsearch Serverless 配置 ==============
+    ES_HOST: str = Field(
+        default="http://space-k4t5xi0i.ap-guangzhou.qcloudes.com",
+        description="腾讯云 ES Serverless 访问地址"
+    )
+    ES_APP_ID: str = Field(
+        default="space-k4t5xi0i",
+        description="ES Serverless 应用 ID"
+    )
+    ES_USERNAME: str = Field(
+        default="",
+        description="ES Serverless 访问用户名"
+    )
+    ES_PASSWORD: str = Field(
+        default="",
+        description="ES Serverless 访问密码"
+    )
+    ES_INDEX_NAME: str = "ppt_slides"
+    ES_USE_SSL: bool = True
+
+    # ============== ChromaDB 配置（已弃用，保留向后兼容）==============
     CHROMA_HOST: str = "localhost"
     CHROMA_PORT: int = 8001
     CHROMA_COLLECTION: str = "ppt_slides"

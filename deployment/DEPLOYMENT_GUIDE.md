@@ -17,7 +17,7 @@
 |---------|------|---------|---------|
 | **PostgreSQL 数据库** | ❌ 未配置 | 核心业务数据 | TDSQL-C 按量计费 或 CloudBase 内置数据库 |
 | **Redis 缓存** | ❌ 未配置 | 会话、缓存、队列 | 腾讯云 Redis 基础版 或 CloudBase 内置 |
-| **Elasticsearch** | ❌ 未配置 | 向量检索、全文搜索 | 腾讯云 ES 或 自建容器 |
+| **Elasticsearch Serverless** | ✅ 已配置 | 向量检索、全文搜索 | `http://space-k4t5xi0i.ap-guangzhou.qcloudes.com` |
 
 ### 1.3 当前问题
 
@@ -58,10 +58,10 @@
 | **CloudRun** | 0.5核1G | 按量 | ~¥50 | 已有,按实际使用计费 |
 | **TDSQL-C PostgreSQL** | 1核2GB | 按量 | ~¥80 | 推荐,可随时扩容 |
 | **Redis 标准版** | 256MB | 包月 | ¥56 | 基础版足够使用 |
-| **Elasticsearch** | 1核2GB | 按量 | ~¥200 | 向量检索,可后置 |
+| **Elasticsearch Serverless** | 已配置 | 按量 | ¥0 | 向量检索,已创建 |
 | **COS 存储** | 标准存储 | 按量 | ~¥10 | 已有免费额度 |
 | **CDN 流量** | 按需 | 按量 | ~¥20 | 可选 |
-| **总计** | - | - | **~¥435.9/月** | |
+| **总计** | - | - | **~¥235.9/月** | ES Serverless 已配置 |
 
 ### 2.3 阶段性成本控制
 
@@ -76,8 +76,8 @@
 
 **第三阶段 (6个月+, 成长期)**:
 - 添加 TDSQL-C: +¥80/月
-- 添加 Elasticsearch: +¥200/月
-- 总成本: ~¥406/月
+- ES Serverless 已配置,按量计费
+- 总成本: ~¥206/月
 
 ---
 
@@ -177,10 +177,12 @@ REDIS_HOST: "host.redis.rds.tencentcloud.com"
 REDIS_PORT: "6379"
 REDIS_PASSWORD: "your-password"
 
-# Elasticsearch
-ES_HOST: "http://host.elasticsearch.tencentcloud.com:9200"
-ES_USER: "elastic"
-ES_PASSWORD: "your-password"
+# Elasticsearch Serverless (已配置)
+ES_HOST: "http://space-k4t5xi0i.ap-guangzhou.qcloudes.com"
+ES_APP_ID: "space-k4t5xi0i"
+ES_USERNAME: "your-es-username"
+ES_PASSWORD: "your-es-password"
+ES_INDEX_NAME: "ppt_slides"
 
 # COS (已有)
 COS_BUCKET: "ppt-rsd-frontend-1253851367"
