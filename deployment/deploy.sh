@@ -3,9 +3,9 @@ set -e
 
 # ============================================
 # PPT-RSD 生产环境部署脚本
-# 用法: ./deploy.sh [stage] [service]
-#   stage: dev | test | prod (默认: prod)
-#   service: all | frontend | backend (默认: all)
+# 独立云资源架构（TKE + TDSQL-C + Redis）
+# 用法: ./deploy.sh [environment]
+#   environment: prod | test (默认: prod)
 # ============================================
 
 # 颜色输出
@@ -16,8 +16,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # 参数解析
-STAGE=${1:-prod}
-SERVICE=${2:-all}
+ENVIRONMENT=${1:-prod}
 
 print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
@@ -27,41 +26,29 @@ print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 # ============================================
 # 环境配置
 # ============================================
-case $STAGE in
+case $ENVIRONMENT in
     prod)
-        ENV_ID="ai-generator-1gp9p3g64d04e869"
-        SERVICE_NAME="ppt-api"
-        FRONTEND_DOMAIN="ppt.bottlepeace.com"
-        API_DOMAIN="ppt-api-228212-9-1253851367.sh.run.tcloudbase.com"
+        NAMESPACE="ppt-rsd-prod"
+        DOMAIN="ppt.bottlepeace.com"
         ;;
     test)
-        ENV_ID="ai-generator-1gp9p3g64d04e869"
-        SERVICE_NAME="ppt-api-test"
-        FRONTEND_DOMAIN="test.ppt.bottlepeace.com"
-        API_DOMAIN="ppt-api-test.sh.run.tcloudbase.com"
-        ;;
-    dev)
-        ENV_ID="ai-generator-1gp9p3g64d04e869"
-        SERVICE_NAME="ppt-api-dev"
-        FRONTEND_DOMAIN="dev.ppt.bottlepeace.com"
-        API_DOMAIN="ppt-api-dev.sh.run.tcloudbase.com"
+        NAMESPACE="ppt-rsd-test"
+        DOMAIN="test.ppt.bottlepeace.com"
         ;;
     *)
-        print_error "未知环境: $STAGE"
-        print_info "支持的环境: dev, test, prod"
+        print_error "未知环境: $ENVIRONMENT"
         exit 1
         ;;
 esac
 
 echo ""
 echo "=========================================="
-echo "  PPT-RSD 部署脚本"
+echo "  PPT-RSD 部署脚本 (独立云资源)"
 echo "=========================================="
 echo ""
-print_info "部署环境: $STAGE"
-print_info "CloudBase 环境: $ENV_ID"
-print_info "服务名称: $SERVICE_NAME"
-print_info "部署目标: $SERVICE"
+print_info "部署环境: $ENVIRONMENT"
+print_info "Kubernetes Namespace: $NAMESPACE"
+print_info "域名: $DOMAIN"
 echo ""
 
 # ============================================
@@ -72,6 +59,7 @@ print_info "检查环境变量..."
 required_vars=(
     "TENCENT_SECRET_ID"
     "TENCENT_SECRET_KEY"
+    "TKE_CLUSTER_ID"
 )
 
 missing_vars=()
@@ -86,247 +74,181 @@ if [ ${#missing_vars[@]} -gt 0 ]; then
     for var in "${missing_vars[@]}"; do
         echo "  - $var"
     done
-    echo ""
-    print_info "请设置环境变量后重试:"
-    echo "  export TENCENT_SECRET_ID=your-secret-id"
-    echo "  export TENCENT_SECRET_KEY=your-secret-key"
     exit 1
 fi
 
 print_success "环境变量检查通过"
 
 # ============================================
-# 检查项目目录
-# ============================================
-print_info "检查项目目录..."
-
-if [ ! -d "backend" ]; then
-    print_error "未找到 backend 目录"
-    print_info "请在项目根目录运行此脚本"
-    exit 1
-fi
-
-if [ ! -d "frontend" ]; then
-    print_error "未找到 frontend 目录"
-    print_info "请在项目根目录运行此脚本"
-    exit 1
-fi
-
-print_success "项目目录检查通过"
-
-# ============================================
-# 安装依赖工具
+# 检查工具
 # ============================================
 print_info "检查部署工具..."
+
+# 检查 kubectl
+if ! command -v kubectl &> /dev/null; then
+    print_error "未安装 kubectl"
+    print_info "安装: https://kubernetes.io/docs/tasks/tools/"
+    exit 1
+fi
 
 # 检查 Docker
 if ! command -v docker &> /dev/null; then
     print_error "未安装 Docker"
-    print_info "请先安装 Docker: https://docs.docker.com/get-docker/"
     exit 1
 fi
 
-# 检查并安装 tccli
-if ! command -v tccli &> /dev/null; then
-    print_info "安装 tccli..."
-    pip install tccli -q
+print_success "部署工具检查通过"
+
+# ============================================
+# 配置 TKE 凭证
+# ============================================
+print_info "配置 TKE 集群凭证..."
+
+# 使用腾讯云 CLI 配置 kubectl
+if command -v tccli &> /dev/null; then
+    tccli configure set secretId "$TENCENT_SECRET_ID"
+    tccli configure set secretKey "$TENCENT_SECRET_KEY"
+    tccli configure set region "${TKE_REGION:-ap-guangzhou}"
 fi
 
-# 检查并安装 coscmd
-if ! command -v coscmd &> /dev/null; then
-    print_info "安装 coscmd..."
-    pip install coscmd -q
+print_success "TKE 凭证配置完成"
+
+# ============================================
+# 构建并推送镜像
+# ============================================
+print_info "========== 构建镜像 =========="
+echo ""
+
+# 生成镜像标签
+IMAGE_TAG="$(date +%Y%m%d%H%M%S)-$(git rev-parse --short HEAD 2>/dev/null || echo 'local')"
+TCR_REGISTRY="${TCR_REGISTRY:-ccr.ccs.tencentyun.com}"
+TCR_NAMESPACE="${TCR_NAMESPACE:-codebuddy-ppt-creator}"
+
+# 登录镜像仓库
+print_info "登录镜像仓库..."
+if [ -n "$TCR_PASSWORD" ]; then
+    echo "$TCR_PASSWORD" | docker login "$TCR_REGISTRY" -u "${TCR_USERNAME:-100000763815}" --password-stdin
 fi
 
-print_success "部署工具准备完成"
+# 构建后端镜像
+print_info "构建后端镜像..."
+BACKEND_IMAGE="${TCR_REGISTRY}/${TCR_NAMESPACE}/backend:${IMAGE_TAG}"
+docker build -t "$BACKEND_IMAGE" -f deployment/docker/Dockerfile.backend ./backend
+docker push "$BACKEND_IMAGE"
+print_success "后端镜像推送完成: $BACKEND_IMAGE"
+
+# 构建前端镜像
+print_info "构建前端镜像..."
+FRONTEND_IMAGE="${TCR_REGISTRY}/${TCR_NAMESPACE}/frontend:${IMAGE_TAG}"
+docker build -t "$FRONTEND_IMAGE" -f deployment/docker/Dockerfile.frontend .
+docker push "$FRONTEND_IMAGE"
+print_success "前端镜像推送完成: $FRONTEND_IMAGE"
 
 # ============================================
-# 配置腾讯云 CLI
+# 部署到 TKE
 # ============================================
-print_info "配置腾讯云 CLI..."
-tccli configure set secretId "$TENCENT_SECRET_ID"
-tccli configure set secretKey "$TENCENT_SECRET_KEY"
-tccli configure set region "ap-shanghai"
+print_info "========== 部署到 TKE =========="
+echo ""
 
-print_success "腾讯云 CLI 配置完成"
+# 检查 namespace 是否存在
+kubectl get namespace "$NAMESPACE" 2>/dev/null || kubectl create namespace "$NAMESPACE"
 
-# ============================================
-# 部署后端
-# ============================================
-if [ "$SERVICE" = "all" ] || [ "$SERVICE" = "backend" ]; then
-    echo ""
-    print_info "========== 部署后端 =========="
-    echo ""
-    
-    # 生成镜像标签
-    IMAGE_TAG="${SERVICE_NAME}-$(date +%Y%m%d%H%M%S)"
-    IMAGE_URL="ccr.ccs.tencentyun.com/tcb-100000763815-pzxy/ca-egweoedj_${SERVICE_NAME}:${IMAGE_TAG}"
-    
-    # 登录镜像仓库
-    print_info "登录镜像仓库..."
-    if [ -n "$TCR_PASSWORD" ]; then
-        echo "$TCR_PASSWORD" | docker login ccr.ccs.tencentyun.com -u "${TCR_USERNAME:-100000763815}" --password-stdin 2>/dev/null || true
-    else
-        print_warn "未设置 TCR_PASSWORD, 将使用 Docker 已登录的凭证"
-    fi
-    
-    # 构建镜像
-    print_info "构建 Docker 镜像..."
-    print_info "镜像标签: $IMAGE_TAG"
-    
-    cd backend
-    docker build \
-        -t "$IMAGE_URL" \
-        -f ../deployment/docker/Dockerfile.backend \
-        --build-arg PYTHON_VERSION=3.9 \
-        .
-    cd ..
-    
-    print_success "镜像构建完成"
-    
-    # 推送镜像
-    print_info "推送镜像到 TCR (可能需要几分钟)..."
-    docker push "$IMAGE_URL"
-    
-    print_success "镜像推送完成"
-    
-    # 部署到 CloudRun
-    print_info "更新 CloudRun 服务..."
-    
-    # 使用 API 更新服务版本
-    UPDATE_RESULT=$(tccli tcb ModifyCloudRunServerVersion \
-        --EnvId "$ENV_ID" \
-        --ServerName "$SERVICE_NAME" \
-        --ImageUrl "$IMAGE_URL" \
-        --Region "ap-shanghai" 2>&1) || {
-        print_warn "直接更新失败, 尝试通过控制台更新"
-        print_info "请访问: https://tcb.cloud.tencent.com/dev?envId=${ENV_ID}#/platform-run"
-    }
-    
-    if echo "$UPDATE_RESULT" | grep -q "Success\|success"; then
-        print_success "CloudRun 服务更新成功"
-    fi
-    
-    echo ""
-    print_success "后端部署完成"
-    print_info "镜像地址: $IMAGE_URL"
-    print_info "API 地址: https://${API_DOMAIN}"
-fi
-
-# ============================================
-# 部署前端
-# ============================================
-if [ "$SERVICE" = "all" ] || [ "$SERVICE" = "frontend" ]; then
-    echo ""
-    print_info "========== 部署前端 =========="
-    echo ""
-    
-    # 检查 Node.js
-    if ! command -v node &> /dev/null; then
-        print_error "未安装 Node.js"
-        exit 1
-    fi
-    
-    # 安装依赖
-    print_info "安装前端依赖..."
-    cd frontend
-    npm ci --quiet 2>/dev/null || npm install --quiet
-    cd ..
-    
-    # 创建环境配置
-    print_info "创建生产环境配置..."
-    cat > frontend/.env.production <<EOF
-VITE_API_URL=https://${API_DOMAIN}
-VITE_APP_TITLE=PPT-RSD
-VITE_ENABLE_MOCK=false
+# 创建/更新部署
+print_info "更新后端部署..."
+kubectl set image deployment/ppt-backend \
+    backend="$BACKEND_IMAGE" \
+    -n "$NAMESPACE" 2>/dev/null || {
+    print_warn "部署不存在，创建新部署..."
+    kubectl apply -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ppt-backend
+  namespace: $NAMESPACE
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ppt-backend
+  template:
+    metadata:
+      labels:
+        app: ppt-backend
+    spec:
+      containers:
+      - name: backend
+        image: $BACKEND_IMAGE
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: ppt-rsd-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: ppt-rsd-secrets
+              key: redis-url
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
 EOF
-    
-    # 构建
-    print_info "构建前端应用..."
-    cd frontend
-    npm run build
-    cd ..
-    
-    if [ ! -d "frontend/dist" ]; then
-        print_error "前端构建失败, 未找到 dist 目录"
-        exit 1
-    fi
-    
-    print_success "前端构建完成"
-    
-    # 配置 COS
-    print_info "配置 COS..."
-    coscmd config \
-        -a "$TENCENT_SECRET_ID" \
-        -s "$TENCENT_SECRET_KEY" \
-        -b "ppt-rsd-frontend-1253851367" \
-        -r "ap-guangzhou"
-    
-    # 清理旧文件
-    print_info "清理旧文件..."
-    coscmd delete -rf / 2>/dev/null || true
-    
-    # 上传新文件
-    print_info "上传前端文件到 COS..."
-    cd frontend/dist
-    coscmd upload -rs . / --ignore "*.map"
-    cd ../..
-    
-    # 配置静态网站
-    print_info "配置静态网站..."
-    coscmd putbucketwebsite --index index.html --error index.html 2>/dev/null || true
-    
-    echo ""
-    print_success "前端部署完成"
-    print_info "访问地址: https://${FRONTEND_DOMAIN}"
-    print_info "COS 地址: http://ppt-rsd-frontend-1253851367.cos-website.ap-guangzhou.myqcloud.com"
-fi
+}
+
+print_info "更新前端部署..."
+kubectl set image deployment/ppt-frontend \
+    frontend="$FRONTEND_IMAGE" \
+    -n "$NAMESPACE" 2>/dev/null || {
+    print_warn "部署不存在，创建新部署..."
+    kubectl apply -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ppt-frontend
+  namespace: $NAMESPACE
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ppt-frontend
+  template:
+    metadata:
+      labels:
+        app: ppt-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: $FRONTEND_IMAGE
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+EOF
+}
+
+# 等待部署完成
+print_info "等待部署完成..."
+kubectl rollout status deployment/ppt-backend -n "$NAMESPACE" --timeout=300s
+kubectl rollout status deployment/ppt-frontend -n "$NAMESPACE" --timeout=300s
 
 # ============================================
 # 健康检查
 # ============================================
-echo ""
 print_info "========== 健康检查 =========="
 echo ""
 
-sleep 5  # 等待服务启动
-
-# 检查后端
-if [ "$SERVICE" = "all" ] || [ "$SERVICE" = "backend" ]; then
-    print_info "检查后端健康状态..."
-    BACKEND_URL="https://${API_DOMAIN}/health"
-    
-    MAX_RETRIES=3
-    RETRY_COUNT=0
-    
-    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-        if curl -f -s --max-time 30 "$BACKEND_URL" > /dev/null 2>&1; then
-            print_success "后端服务正常"
-            break
-        else
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                print_warn "后端服务检查失败, 等待重试... ($RETRY_COUNT/$MAX_RETRIES)"
-                sleep 10
-            else
-                print_error "后端服务异常"
-                print_info "请检查日志: https://tcb.cloud.tencent.com/dev?envId=${ENV_ID}#/platform-run"
-            fi
-        fi
-    done
-fi
-
-# 检查前端
-if [ "$SERVICE" = "all" ] || [ "$SERVICE" = "frontend" ]; then
-    print_info "检查前端服务状态..."
-    FRONTEND_URL="http://ppt-rsd-frontend-1253851367.cos-website.ap-guangzhou.myqcloud.com"
-    
-    if curl -f -s --max-time 10 "$FRONTEND_URL" > /dev/null 2>&1; then
-        print_success "前端服务正常"
-    else
-        print_warn "前端服务检查失败"
-    fi
-fi
+kubectl get pods -n "$NAMESPACE"
 
 # ============================================
 # 部署总结
@@ -337,24 +259,12 @@ echo "  🎉 部署完成!"
 echo "=========================================="
 echo ""
 echo "📌 访问地址:"
-echo "   前端: https://${FRONTEND_DOMAIN}"
-echo "   API:  https://${API_DOMAIN}"
-echo "   COS:  http://ppt-rsd-frontend-1253851367.cos-website.ap-guangzhou.myqcloud.com"
+echo "   前端: https://${DOMAIN}"
+echo "   API:  https://api.${DOMAIN}"
 echo ""
-echo "📊 监控控制台:"
-echo "   CloudBase 概览: https://tcb.cloud.tencent.com/dev?envId=${ENV_ID}#/overview"
-echo "   CloudRun 服务:  https://tcb.cloud.tencent.com/dev?envId=${ENV_ID}#/platform-run"
-echo "   云函数:         https://tcb.cloud.tencent.com/dev?envId=${ENV_ID}#/scf"
+echo "📊 监控命令:"
+echo "   kubectl get pods -n $NAMESPACE"
+echo "   kubectl logs -f deployment/ppt-backend -n $NAMESPACE"
 echo ""
-echo "💰 当前资源成本 (预估):"
-echo "   CloudBase 个人版: ¥19.9/月"
-echo "   CloudRun:         ~¥50/月 (按量计费)"
-echo "   COS 存储:         ~¥10/月 (按量计费)"
-echo "   ────────────────────────"
-echo "   总计:             ~¥80/月"
-echo ""
-echo "📝 后续操作:"
-echo "   1. 配置自定义域名 DNS 解析"
-echo "   2. 开启 CDN 加速"
-echo "   3. 配置监控告警"
+echo "📦 镜像标签: $IMAGE_TAG"
 echo ""

@@ -38,10 +38,10 @@ class Settings(BaseSettings):
         "https://ai-generator-1gp9p3g64d04e869-1253851367.tcloudbaseapp.com",
     ]
     
-    # ============== 数据库配置 ==============
+    # ============== 数据库配置（MySQL）==============
     DATABASE_URL: str = Field(
-        default="sqlite:///./data/ppt_generator.db",
-        description="数据库连接字符串"
+        default="mysql+pymysql://root:password@localhost:3306/ppt_rsd",
+        description="MySQL 数据库连接字符串 (TDSQL-C)"
     )
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20

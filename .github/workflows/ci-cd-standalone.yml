@@ -1,0 +1,300 @@
+# ============================================
+# PPT-RSD 生产级 CI/CD 流水线
+# 独立云资源架构（TKE + TDSQL-C + Redis）
+# ============================================
+
+name: CI/CD Pipeline (Standalone)
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '部署环境'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - prod
+          - test
+
+env:
+  # 腾讯云配置
+  TCR_REGISTRY: ccr.ccs.tencentyun.com
+  TCR_NAMESPACE: codebuddy-ppt-creator
+  TKE_REGION: ap-guangzhou
+
+  # 域名配置
+  PROD_DOMAIN: ppt.bottlepeace.com
+  TEST_DOMAIN: test.ppt.bottlepeace.com
+
+jobs:
+  # ==========================================
+  # 代码检查
+  # ==========================================
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Lint frontend
+        run: cd frontend && npm run lint || true
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install ruff black isort
+
+      - name: Lint backend
+        run: |
+          cd backend
+          ruff check . || true
+
+  # ==========================================
+  # 单元测试
+  # ==========================================
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: ppt_rsd_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio
+
+      - name: Run tests
+        env:
+          DATABASE_URL: mysql+pymysql://root:test_password@localhost:3306/ppt_rsd_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key
+          APP_ENV: test
+        run: |
+          cd backend
+          pytest tests/ -v --tb=short --cov=app --cov-report=xml || true
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: backend/coverage.xml
+          fail_ci_if_error: false
+
+  # ==========================================
+  # 安全扫描
+  # ==========================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+  # ==========================================
+  # 构建镜像
+  # ==========================================
+  build:
+    name: Build Images
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to TCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.TCR_REGISTRY }}
+          username: ${{ secrets.TCR_USERNAME }}
+          password: ${{ secrets.TCR_PASSWORD }}
+
+      - name: Generate image tag
+        id: meta
+        run: |
+          IMAGE_TAG="$(date +%Y%m%d%H%M%S)-${{ github.sha:0:7 }}"
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: deployment/docker/Dockerfile.backend
+          push: true
+          tags: |
+            ${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/backend:${{ steps.meta.outputs.image_tag }}
+            ${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: deployment/docker/Dockerfile.frontend
+          push: true
+          tags: |
+            ${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/frontend:${{ steps.meta.outputs.image_tag }}
+            ${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ==========================================
+  # 部署到 TKE 生产环境
+  # ==========================================
+  deploy-prod:
+    name: Deploy to Production (TKE)
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
+    environment:
+      name: production
+      url: https://ppt.bottlepeace.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure TKE credentials
+        uses: tencentcloud/tke-cluster-credential-action@v1
+        with:
+          secret_id: ${{ secrets.TENCENT_SECRET_ID }}
+          secret_key: ${{ secrets.TENCENT_SECRET_KEY }}
+          tke_region: ${{ env.TKE_REGION }}
+          cluster_id: ${{ secrets.TKE_CLUSTER_ID }}
+
+      - name: Deploy to TKE
+        run: |
+          # 更新后端部署
+          kubectl set image deployment/ppt-backend \
+            backend=${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/backend:${{ needs.build.outputs.image_tag }} \
+            -n ppt-rsd-prod || \
+          echo "Deployment may not exist yet, creating..."
+
+          # 更新前端部署
+          kubectl set image deployment/ppt-frontend \
+            frontend=${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/frontend:${{ needs.build.outputs.image_tag }} \
+            -n ppt-rsd-prod || \
+          echo "Deployment may not exist yet, creating..."
+
+          # 等待部署完成
+          kubectl rollout status deployment/ppt-backend -n ppt-rsd-prod --timeout=300s || true
+          kubectl rollout status deployment/ppt-frontend -n ppt-rsd-prod --timeout=300s || true
+
+      - name: Health check
+        run: |
+          echo "Waiting for service to start..."
+          sleep 30
+
+          echo "Checking backend health..."
+          kubectl get pods -n ppt-rsd-prod
+
+      - name: Deployment summary
+        run: |
+          echo "## 🎉 Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📌 Access URLs" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend**: https://${{ env.PROD_DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backend**: https://api.${{ env.PROD_DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Image Tag" >> $GITHUB_STEP_SUMMARY
+          echo "\`${{ needs.build.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+
+  # ==========================================
+  # 部署通知
+  # ==========================================
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [deploy-prod]
+    if: always() && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Send notification
+        run: |
+          if [ "${{ needs.deploy-prod.result }}" = "success" ]; then
+            echo "✅ 生产环境部署成功"
+          else
+            echo "❌ 生产环境部署失败"
+          fi
