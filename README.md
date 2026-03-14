@@ -1,10 +1,6 @@
-# CloudBase 项目
+# Codebuddy项目
 
-基于云开发 + CloudBase AI ToolKit 构建的项目
-
-[![Powered by CloudBase](https://7463-tcb-advanced-a656fc-1257967285.tcb.qcloud.la/mcp/powered-by-cloudbase-badge.svg)](https://github.com/TencentCloudBase/CloudBase-AI-ToolKit)  
-
-> 本项目基于 [**CloudBase AI ToolKit**](https://github.com/TencentCloudBase/CloudBase-AI-ToolKit) 开发，通过AI提示词和 MCP 协议+云开发，让开发更智能、更高效，支持AI生成全栈代码、一键部署至腾讯云开发（免服务器）、智能日志修复。
+基于codebuddy + 腾讯云 构建的项目
 
 ## 核心功能
 
@@ -16,9 +12,6 @@
 
 - **完整预览**：支持完整的 PPT 内容预览，包括动画、特效和高清渲染
 - **多种模式**：支持 HTML 预览（交互性好）和图片预览（保真度高）
-- **实时转换**：基于腾讯云数据万象服务，实时转换 PPT 格式
-- **智能降级**：当 COS 服务未配置时，自动降级到本地文件预览
-- **成本可控**：按量计费，免费额度充足（6000 页/2 个月）
 
 #### 使用方式
 
