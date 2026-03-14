@@ -39,22 +39,6 @@ COS_REGION=ap-guangzhou
 COS_BUCKET=your-bucket-name
 ```
 
-#### 成本估算
-
-- **文档转 HTML**：0.01 元/次
-- **文档转图片**：0.1 元/千页
-- **免费额度**：6000 页/2 个月
-- **预估成本**（1000 次预览/月）：约 10-20 元
-
-## 技术栈
-
-- **前端**：React 18 + TypeScript + Vite + TDesign UI
-- **后端**：Python FastAPI + 腾讯云 COS SDK
-- **云服务**：腾讯云数据万象（CI）文档预览
-- **数据库**：TDSQL-C PostgreSQL
-- **缓存**：腾讯云 Redis
-- **存储**：腾讯云 COS
-
 ## 快速开始
 
 ### 1. 安装依赖
@@ -88,82 +72,6 @@ npm run dev
 ### 4. 访问应用
 
 打开浏览器访问 `http://localhost:5173`
-
-## 项目结构
-
-```
-PPT-RSD/
-├── backend/              # 后端服务
-│   ├── app/
-│   │   ├── api/         # API 路由
-│   │   ├── models/      # 数据模型
-│   │   ├── schemas/     # 数据验证模式
-│   │   ├── services/    # 业务逻辑
-│   │   │   ├── ppt_export.py      # PPT 导出服务
-│   │   │   └── cos_upload.py      # COS 上传服务
-│   │   └── main.py      # 应用入口
-│   └── requirements.txt
-├── frontend/            # 前端应用
-│   ├── src/
-│   │   ├── components/  # 公共组件
-│   │   │   └── PPTViewer/         # PPT 预览组件
-│   │   ├── pages/       # 页面组件
-│   │   │   └── Assembly/          # PPT 组装页面
-│   │   ├── api/         # API 调用
-│   │   └── stores/      # 状态管理
-│   └── package.json
-└── README.md
-```
-
-## 开发指南
-
-### PPT 预览功能开发
-
-#### 前端组件
-
-```tsx
-import PPTViewer from '@/components/PPTViewer';
-
-<PPTViewer
-  visible={showPreview}
-  fileUrl={previewUrl}
-  fileName={fileName}
-  onClose={() => setShowPreview(false)}
-  onDownload={handleDownload}
-/>
-```
-
-#### 后端 API
-
-```python
-# 预览端点
-POST /api/drafts/{draft_id}/preview
-
-# 返回格式
-{
-  "download_url": "https://cos-url?ci-process=doc-preview&dstType=html",
-  "file_size": 1024000,
-  "file_name": "演示文稿.pptx",
-  "exported_at": "2025-03-06T10:00:00"
-}
-```
-
-### 自定义预览参数
-
-腾讯云数据万象支持多种预览参数：
-
-```javascript
-// HTML 预览（默认）
-url?ci-process=doc-preview&dstType=html
-
-// 图片预览
-url?ci-process=doc-preview&dstType=jpg
-
-// 指定页码
-url?ci-process=doc-preview&dstType=html&page=1
-```
-
-更多参数请参考 [腾讯云数据万象文档](https://cloud.tencent.com/document/product/460/46499)。
 
 ## 许可证
 
