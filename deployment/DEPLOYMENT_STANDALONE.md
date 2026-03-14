@@ -8,7 +8,7 @@
 |-----------|--------|---------|
 | **EKS Serverless** | ✅ 已有 | `cls-1lvwzqie` (stable-diffusion-webui) |
 | **TDSQL-C MySQL** | ✅ 已创建 | `cynosdbmysql-1iqzmqr3` (ppt-rsd-mysql) |
-| **Redis** | ⏳ 待创建 | - |
+| **Redis** | ✅ 已创建 | `crs-bn7gmtnk` (ppt-creator-redis-256M) |
 | **COS** | ✅ 已有 | `ppt-creator-store-1253851367` |
 | **ES Serverless** | ✅ 已有 | `space-k4t5xi0i` |
 | **TCR** | ✅ 已有 | `codebuddy-ppt-creator` |
@@ -54,7 +54,30 @@ mysql+pymysql://root:PPT@RSD2024!mysql@10.6.1.13:3306/ppt_rsd
 
 **控制台**: https://console.cloud.tencent.com/cynosdb/db/detail/cynosdbmysql-1iqzmqr3
 
-### 2.3 Elasticsearch Serverless（向量检索）
+### 2.3 云数据库 Redis（缓存）
+
+| 项目 | 值 |
+|-----|-----|
+| **实例 ID** | `crs-bn7gmtnk` |
+| **实例名称** | `ppt-creator-redis-256M` |
+| **状态** | Running ✅ |
+| **版本** | Redis 7.1.3 |
+| **内存** | 256MB |
+| **内网地址** | `10.6.1.42` |
+| **端口** | `6379` |
+| **密码** | `caonidaye@123` |
+| **VPC** | `vpc-gjkbluhz` |
+| **子网** | `subnet-fw1l5vte` |
+| **成本** | ~¥56/月 |
+
+**连接字符串**:
+```
+redis://:caonidaye@123@10.6.1.42:6379/0
+```
+
+**控制台**: https://console.cloud.tencent.com/redis/instance/crs-bn7gmtnk
+
+### 2.4 Elasticsearch Serverless（向量检索）
 
 | 项目 | 值 |
 |-----|-----|
@@ -66,7 +89,7 @@ mysql+pymysql://root:PPT@RSD2024!mysql@10.6.1.13:3306/ppt_rsd
 
 **控制台**: https://console.cloud.tencent.com/es
 
-### 2.4 VPC 网络
+### 2.5 VPC 网络
 
 | 项目 | 值 |
 |-----|-----|
@@ -78,22 +101,9 @@ mysql+pymysql://root:PPT@RSD2024!mysql@10.6.1.13:3306/ppt_rsd
 | **可用 IP** | 250 个 |
 | **地域** | 广州七区 |
 
-## 三、待创建资源
+## 三、成本汇总
 
-### 3.1 云数据库 Redis（缓存）
-
-**推荐配置**:
-- 地域: 广州七区
-- 版本: Redis 5.0 标准版
-- 规格: 256MB 内存
-- 计费模式: 包年包月
-- VPC: `vpc-gjkbluhz`
-
-**预估成本**: ¥56/月
-
-**控制台**: https://buy.cloud.tencent.com/redis
-
-## 四、成本汇总
+所有资源已创建完成，无需额外创建资源。
 
 | 资源 | 配置 | 月成本 |
 |-----|------|--------|
@@ -101,7 +111,7 @@ mysql+pymysql://root:PPT@RSD2024!mysql@10.6.1.13:3306/ppt_rsd
 | MySQL Serverless | 0.5-2核，20GB | ¥30-80 |
 | ES Serverless | 已有 | 按量计费 |
 | COS | 已有 | ~¥10 |
-| Redis | 256MB (待创建) | ¥56 |
+| Redis | 256MB | ~¥56 |
 | **总计** | - | **¥96-146/月** |
 
 ## 五、连接信息汇总
