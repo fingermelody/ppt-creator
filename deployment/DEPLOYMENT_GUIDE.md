@@ -180,8 +180,8 @@ REDIS_PASSWORD: "your-password"
 # Elasticsearch Serverless (已配置)
 ES_HOST: "http://space-k4t5xi0i.ap-guangzhou.qcloudes.com"
 ES_APP_ID: "space-k4t5xi0i"
-ES_USERNAME: "your-es-username"
-ES_PASSWORD: "your-es-password"
+ES_USERNAME: "elastic"
+ES_PASSWORD: "caonidaye@123"
 ES_INDEX_NAME: "ppt_slides"
 
 # COS (已有)

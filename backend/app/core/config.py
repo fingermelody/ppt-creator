@@ -63,11 +63,11 @@ class Settings(BaseSettings):
         description="ES Serverless 应用 ID"
     )
     ES_USERNAME: str = Field(
-        default="",
+        default="elastic",
         description="ES Serverless 访问用户名"
     )
     ES_PASSWORD: str = Field(
-        default="",
+        default="caonidaye@123",
         description="ES Serverless 访问密码"
     )
     ES_INDEX_NAME: str = "ppt_slides"
