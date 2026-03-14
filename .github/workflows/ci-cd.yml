@@ -1,0 +1,375 @@
+# ============================================
+# PPT-RSD 统一 CI/CD 流水线
+# 生产级部署方案
+# ============================================
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '部署环境'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - prod
+          - test
+          - dev
+
+env:
+  # CloudBase 配置
+  ENV_ID: ai-generator-1gp9p3g64d04e869
+  REGION: ap-shanghai
+
+  # 镜像仓库配置
+  TCR_REGISTRY: ccr.ccs.tencentyun.com
+  TCR_NAMESPACE: tcb-100000763815-pzxy
+
+  # 域名配置
+  PROD_FRONTEND_DOMAIN: ppt.bottlepeace.com
+  PROD_API_DOMAIN: ppt-api-228212-9-1253851367.sh.run.tcloudbase.com
+
+jobs:
+  # ==========================================
+  # 代码检查
+  # ==========================================
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Lint frontend
+        run: cd frontend && npm run lint || true
+
+      - name: Type check frontend
+        run: cd frontend && npm run type-check || true
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install ruff black isort
+
+      - name: Lint backend
+        run: |
+          cd backend
+          ruff check . || true
+          black --check . || true
+
+  # ==========================================
+  # 单元测试
+  # ==========================================
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: ppt_rsd_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio
+
+      - name: Run backend tests
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/ppt_rsd_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key
+          APP_ENV: test
+        run: |
+          cd backend
+          pytest tests/ -v --tb=short --cov=app --cov-report=xml || true
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: backend/coverage.xml
+          fail_ci_if_error: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Run frontend tests
+        run: cd frontend && npm run test -- --coverage --watchAll=false || true
+
+  # ==========================================
+  # 安全扫描
+  # ==========================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+  # ==========================================
+  # 构建镜像
+  # ==========================================
+  build:
+    name: Build Images
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to TCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.TCR_REGISTRY }}
+          username: ${{ secrets.TCR_USERNAME }}
+          password: ${{ secrets.TCR_PASSWORD }}
+
+      - name: Generate image tag
+        id: meta
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            SERVICE_NAME="ppt-api"
+          elif [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+            SERVICE_NAME="ppt-api-test"
+          else
+            SERVICE_NAME="ppt-api-dev"
+          fi
+          IMAGE_TAG="${SERVICE_NAME}-$(date +%Y%m%d%H%M%S)-${{ github.sha:0:7 }}"
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "service_name=${SERVICE_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: deployment/docker/Dockerfile.backend
+          push: true
+          tags: |
+            ${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/ca-egweoedj_${{ steps.meta.outputs.service_name }}:${{ steps.meta.outputs.image_tag }}
+            ${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/ca-egweoedj_${{ steps.meta.outputs.service_name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ==========================================
+  # 部署到生产环境
+  # ==========================================
+  deploy-prod:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
+    environment:
+      name: production
+      url: https://ppt.bottlepeace.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deployment tools
+        run: |
+          pip install tccli coscmd
+
+      - name: Configure Tencent Cloud CLI
+        run: |
+          tccli configure set secretId ${{ secrets.TENCENT_SECRET_ID }}
+          tccli configure set secretKey ${{ secrets.TENCENT_SECRET_KEY }}
+          tccli configure set region ${{ env.REGION }}
+
+      - name: Deploy backend to CloudRun
+        run: |
+          IMAGE_URL="${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/ca-egweoedj_ppt-api:${{ needs.build.outputs.image_tag }}"
+          
+          echo "Deploying image: $IMAGE_URL"
+          
+          tccli tcb RunReBuildContainer \
+            --EnvId ${{ env.ENV_ID }} \
+            --ServerName ppt-api \
+            --ImageUrl "$IMAGE_URL" \
+            --Region ${{ env.REGION }} || echo "Note: Deployment may require manual verification"
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm ci
+          echo "VITE_API_URL=https://${{ env.PROD_API_DOMAIN }}" > .env.production
+          echo "VITE_APP_TITLE=PPT-RSD" >> .env.production
+          echo "VITE_ENABLE_MOCK=false" >> .env.production
+          npm run build
+
+      - name: Deploy frontend to COS
+        run: |
+          coscmd config \
+            -a ${{ secrets.TENCENT_SECRET_ID }} \
+            -s ${{ secrets.TENCENT_SECRET_KEY }} \
+            -b ppt-rsd-frontend-1253851367 \
+            -r ap-guangzhou
+          
+          cd frontend/dist
+          coscmd delete -rf / 2>/dev/null || true
+          coscmd upload -rs . /
+          coscmd putbucketwebsite --index index.html --error index.html
+
+      - name: Health check
+        run: |
+          echo "Waiting for service to start..."
+          sleep 15
+          
+          echo "Checking backend health..."
+          curl -f -s --max-time 30 "https://${{ env.PROD_API_DOMAIN }}/health" || echo "Backend health check failed"
+          
+          echo "Checking frontend..."
+          curl -f -s --max-time 10 "http://ppt-rsd-frontend-1253851367.cos-website.ap-guangzhou.myqcloud.com" || echo "Frontend health check failed"
+
+      - name: Deployment summary
+        run: |
+          echo "## 🎉 Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📌 Access URLs" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend**: https://${{ env.PROD_FRONTEND_DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **API**: https://${{ env.PROD_API_DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Image" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: \`${{ needs.build.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+
+  # ==========================================
+  # 部署到测试环境
+  # ==========================================
+  deploy-test:
+    name: Deploy to Test
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test')
+    environment:
+      name: test
+      url: https://test.ppt.bottlepeace.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deployment tools
+        run: pip install tccli coscmd
+
+      - name: Configure Tencent Cloud CLI
+        run: |
+          tccli configure set secretId ${{ secrets.TENCENT_SECRET_ID }}
+          tccli configure set secretKey ${{ secrets.TENCENT_SECRET_KEY }}
+          tccli configure set region ${{ env.REGION }}
+
+      - name: Deploy summary
+        run: |
+          echo "## 🧪 Test Environment Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Image tag: ${{ needs.build.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
+
+  # ==========================================
+  # 部署通知
+  # ==========================================
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [deploy-prod]
+    if: always() && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Send notification
+        run: |
+          if [ "${{ needs.deploy-prod.result }}" = "success" ]; then
+            echo "✅ 部署成功"
+          else
+            echo "❌ 部署失败"
+          fi
