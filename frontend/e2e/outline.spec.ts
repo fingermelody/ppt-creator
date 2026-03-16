@@ -22,14 +22,14 @@ test.describe('大纲页面测试', () => {
   });
 
   test('生成方式标签页切换', async ({ page }) => {
-    // 检查默认选中"智能生成"
-    await expect(page.locator('.t-tabs__nav-item').first()).toHaveAttribute('aria-selected', 'true');
+    // 检查默认选中"智能生成" - TDesign 使用 t-is-active 类
+    await expect(page.locator('.t-tabs__nav-item').first()).toHaveClass(/t-is-active/);
     
     // 点击"向导式生成"标签
-    await page.locator('text=向导式生成').click();
+    await page.locator('.t-tabs__nav-item').filter({ hasText: '向导式生成' }).click();
     
     // 验证标签页切换成功
-    await expect(page.locator('.t-tabs__nav-item').nth(1)).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.t-tabs__nav-item').filter({ hasText: '向导式生成' })).toHaveClass(/t-is-active/);
   });
 
   test('使用模板按钮显示', async ({ page }) => {

@@ -8,7 +8,7 @@ import { test, expect, Page } from '@playwright/test';
 test.describe('文档库页面测试', () => {
   test.beforeEach(async ({ page }) => {
     // 导航到文档库页面
-    await page.goto('/#/documents');
+    await page.goto('/#/library');
     // 等待页面加载完成
     await page.waitForLoadState('networkidle');
   });

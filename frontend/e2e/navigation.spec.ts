@@ -33,10 +33,10 @@ test.describe('页面导航测试', () => {
   });
 
   test('导航到文档库页面', async ({ page }) => {
-    await page.goto('/#/documents');
+    await page.goto('/#/library');
     await page.waitForLoadState('networkidle');
     
-    await expect(page).toHaveURL(/.*documents.*/);
+    await expect(page).toHaveURL(/.*library.*/);
   });
 
   test('导航到组装页面', async ({ page }) => {
