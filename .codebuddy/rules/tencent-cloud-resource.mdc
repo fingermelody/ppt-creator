@@ -173,13 +173,20 @@ tccli redis InquiryPriceCreateInstance
 
 ## 环境变量配置
 
-项目根目录 `.env` 文件中已配置：
+项目根目录 `.env` 文件中需要配置：
 
 ```bash
-TENCENT_SECRET_ID=AKID_REDACTED_SECRET_ID
-TENCENT_SECRET_KEY=HWlrlX9fyIQj3Pj0GJ9l9IEwQgimmdP8
+# 腾讯云凭证（请从腾讯云控制台获取）
+TENCENT_SECRET_ID=your-secret-id
+TENCENT_SECRET_KEY=your-secret-key
 TENCENT_REGION=ap-guangzhou
 ```
+
+**安全提示**:
+- 🔒 切勿将真实的 SECRET_ID 和 SECRET_KEY 提交到代码仓库
+- 🔒 确保 `.env` 文件已添加到 `.gitignore`
+- 🔒 使用不同环境的凭证（开发/测试/生产）
+- 🔒 定期轮换密钥以提高安全性
 
 ## 创建资源清单模板
 

@@ -120,8 +120,8 @@ redis://:caonidaye@123@10.6.1.42:6379/0
 
 ```bash
 # 腾讯云密钥
-TENCENT_SECRET_ID=AKID_REDACTED_SECRET_ID
-TENCENT_SECRET_KEY=HWlrlX9fyIQj3Pj0GJ9l9IEwQgimmdP8
+TENCENT_SECRET_ID=your-secret-id
+TENCENT_SECRET_KEY=your-secret-key
 TENCENT_REGION=ap-guangzhou
 
 # EKS 集群
@@ -158,8 +158,8 @@ TCR_USERNAME=100000763815
 
 ```yaml
 # 必需
-TENCENT_SECRET_ID: "AKID_REDACTED_SECRET_ID"
-TENCENT_SECRET_KEY: "HWlrlX9fyIQj3Pj0GJ9l9IEwQgimmdP8"
+TENCENT_SECRET_ID: "your-secret-id"
+TENCENT_SECRET_KEY: "your-secret-key"
 TKE_CLUSTER_ID: "cls-1lvwzqie"
 
 # 数据库
@@ -175,8 +175,8 @@ ES_PASSWORD: "caonidaye@123"
 
 ```bash
 # 本地部署
-export TENCENT_SECRET_ID="AKID_REDACTED_SECRET_ID"
-export TENCENT_SECRET_KEY="HWlrlX9fyIQj3Pj0GJ9l9IEwQgimmdP8"
+export TENCENT_SECRET_ID="your-secret-id"
+export TENCENT_SECRET_KEY="your-secret-key"
 export TKE_CLUSTER_ID="cls-1lvwzqie"
 ./deployment/deploy.sh prod
 ```
