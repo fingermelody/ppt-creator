@@ -10,6 +10,7 @@ from typing import Optional, Tuple
 from qcloud_cos import CosConfig
 from qcloud_cos import CosS3Client
 import uuid
+import re
 
 from app.core.config import settings
 
@@ -25,6 +26,49 @@ class COSUploadService:
     
     # PPT 文件存储前缀
     PPT_PREFIX = "ppt-files"
+    
+    def _validate_object_key(self, object_key: str) -> bool:
+        """
+        验证 COS 对象键是否安全
+        
+        防止路径遍历攻击和越权访问:
+        - 禁止包含 ../ 或 ..\ 
+        - 禁止以 / 或 \ 开头（绝对路径）
+        - 禁止包含特殊字符和空字节
+        - 必须匹配安全字符集
+        
+        Args:
+            object_key: 待验证的对象键
+            
+        Returns:
+            是否通过验证
+        """
+        if not object_key or not isinstance(object_key, str):
+            logger.error("对象键为空或类型错误")
+            return False
+        
+        # 规范化路径并检查是否包含路径遍历
+        normalized = os.path.normpath(object_key)
+        if normalized.startswith('..') or '/..' in object_key or '\\..' in object_key:
+            logger.error(f"对象键包含路径遍历字符: {object_key}")
+            return False
+        
+        # 禁止绝对路径
+        if object_key.startswith('/') or object_key.startswith('\\'):
+            logger.error(f"对象键不能是绝对路径: {object_key}")
+            return False
+        
+        # 检查空字节注入
+        if '\x00' in object_key:
+            logger.error(f"对象键包含空字节: {object_key}")
+            return False
+        
+        # 只允许安全字符：字母、数字、下划线、连字符、斜杠、点
+        if not re.match(r'^[a-zA-Z0-9_\-/\.]+$', object_key):
+            logger.error(f"对象键包含非法字符: {object_key}")
+            return False
+        
+        return True
     
     def __init__(self):
         # 从配置文件获取配置（优先使用配置文件，兼容环境变量）
@@ -135,6 +179,11 @@ class COSUploadService:
             logger.error("COS 服务未启用")
             return False
         
+        # 安全校验
+        if not self._validate_object_key(object_key):
+            logger.error(f"对象键校验失败，拒绝删除: {object_key}")
+            return False
+        
         try:
             self.client.delete_object(
                 Bucket=self.bucket,
@@ -163,6 +212,11 @@ class COSUploadService:
         """
         if not self.enabled:
             logger.error("COS 服务未启用")
+            return None
+        
+        # 安全校验 - 防止路径遍历和越权访问
+        if not self._validate_object_key(object_key):
+            logger.error(f"对象键校验失败，拒绝生成预签名 URL: {object_key}")
             return None
         
         try:
@@ -261,6 +315,11 @@ class COSUploadService:
                 unique_id = uuid.uuid4().hex[:8]
                 filename = os.path.basename(file_path)
                 object_key = f"temp/{timestamp}_{unique_id}/{filename}"
+            else:
+                # 如果提供了外部 object_key，必须进行安全校验
+                if not self._validate_object_key(object_key):
+                    logger.error(f"对象键校验失败，拒绝上传: {object_key}")
+                    return None
             
             # 上传文件
             with open(file_path, 'rb') as fp:
