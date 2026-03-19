@@ -12,6 +12,7 @@ from mangum import Mangum
 from app.core.config import settings
 from app.api.v1 import api_router
 from app.db import Base, engine
+import app.models  # noqa: F401 — ensure all models are registered with Base
 
 
 @asynccontextmanager

@@ -6,7 +6,7 @@ mangum==0.17.0
 
 # 数据库
 sqlalchemy==2.0.25
-pymysql==1.1.0
+pymysql==1.1.1
 psycopg2-binary==2.9.9
 alembic==1.13.1
 
@@ -17,7 +17,7 @@ redis==5.0.1
 chromadb==0.4.22
 
 # 认证
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.4.0
 passlib[bcrypt]==1.7.4
 
 # HTTP 客户端

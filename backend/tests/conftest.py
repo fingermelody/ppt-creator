@@ -15,8 +15,9 @@ from sqlalchemy.pool import StaticPool
 os.environ["TESTING"] = "true"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
-from app.models.base import Base
-from app.core.database import get_db
+from app.db.base import Base
+from app.db import get_db
+import app.models  # noqa: F401 — register all models with Base
 
 
 # 创建测试数据库引擎
