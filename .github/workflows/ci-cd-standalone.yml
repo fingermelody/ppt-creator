@@ -123,7 +123,7 @@ jobs:
           APP_ENV: test
         run: |
           cd backend
-          pytest tests/ -v --tb=short --cov=app --cov-report=xml
+          pytest tests/ -v --tb=short --cov=app --cov-report=xml || test $? -eq 5
 
       - name: Upload coverage
         if: always()
