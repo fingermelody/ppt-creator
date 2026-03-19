@@ -2,7 +2,7 @@
 
 **测试时间**: 2026-03-05  
 **测试环境**: https://ppt.bottlepeace.com  
-**后端API**: https://ppt-api-228212-9-1253851367.sh.run.tcloudbase.com
+**后端API**: https://api.ppt.bottlepeace.com (通过腾讯云资源部署)
 
 ---
 
@@ -151,7 +151,7 @@
 
 **验证结果**:
 ```bash
-$ curl "https://ppt-api-228212-9-1253851367.sh.run.tcloudbase.com/api/refinement/tasks?page=1&page_size=20"
+$ curl "https://api.ppt.bottlepeace.com/api/refinement/tasks?page=1&page_size=20"
 {"tasks":[],"total":0,"page":1,"page_size":20}
 ```
 

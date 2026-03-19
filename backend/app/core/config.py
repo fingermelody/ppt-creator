@@ -35,7 +35,6 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://localhost:3000",
         "https://ppt.bottlepeace.com",
-        "https://ai-generator-1gp9p3g64d04e869-1253851367.tcloudbaseapp.com",
     ]
     
     # ============== 数据库配置（MySQL）==============
