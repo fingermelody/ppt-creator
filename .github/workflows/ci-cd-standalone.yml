@@ -10,6 +10,7 @@ on:
     branches:
       - main
       - develop
+      - deployment
       - 'feature/**'
   pull_request:
     branches:

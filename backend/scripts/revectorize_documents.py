@@ -67,7 +67,7 @@ def revectorize_document(db, document: Document, force: bool = False):
         # 如果已向量化且不强制，则跳过
         if slide.is_vectorized and slide.vector_id and not force:
             # 检查是否需要更新元数据（添加 source_url）
-            # 注：ChromaDB 不支持直接更新元数据，需要删除后重新添加
+            # 注：删除后重新添加向量
             logger.debug(f"  页面 {slide.page_number} 已向量化，将更新元数据")
         
         if not slide.content_text:

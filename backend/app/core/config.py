@@ -73,12 +73,13 @@ class Settings(BaseSettings):
     ES_INDEX_NAME: str = "ppt_slides"
     ES_USE_SSL: bool = True
 
-    # ============== ChromaDB 配置（已弃用，保留向后兼容）==============
+    # ============== ChromaDB 配置（已弃用，使用 ES 替代）==============
+    # 保留配置项以向后兼容，实际使用 ES Serverless
     CHROMA_HOST: str = "localhost"
     CHROMA_PORT: int = 8001
     CHROMA_COLLECTION: str = "ppt_slides"
-    CHROMA_USE_LOCAL: bool = True  # 使用本地持久化模式
-    CHROMA_PERSIST_DIR: str = "./data/chromadb"  # 本地数据存储目录
+    CHROMA_USE_LOCAL: bool = True
+    CHROMA_PERSIST_DIR: str = "./data/chromadb"
     
     # ============== 文件存储配置 ==============
     UPLOAD_DIR: str = "/data/uploads"
@@ -141,10 +142,14 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 4096
     LLM_TEMPERATURE: float = 0.7
     
-    # ============== 向量化模型配置 ==============
-    EMBEDDING_MODEL: str = "moka-ai/m3e-base"
-    EMBEDDING_DEVICE: str = "cpu"  # cpu, cuda, mps
-    EMBEDDING_BATCH_SIZE: int = 32
+    # ============== 向量化配置（API 模式）==============
+    # 使用腾讯混元 Embedding API 替代本地 SentenceTransformer
+    EMBEDDING_API_PROVIDER: str = Field(
+        default="hunyuan",
+        description="Embedding API 提供商: hunyuan, openai"
+    )
+    # 混元 Embedding 使用与 LLM 相同的腾讯云凭证 (HUNYUAN_SECRET_ID/KEY)
+    EMBEDDING_DIMENSION: int = 1024  # 混元 embedding 维度
     
     # ============== 网络搜索配置 ==============
     SEARCH_ENGINE: str = Field(

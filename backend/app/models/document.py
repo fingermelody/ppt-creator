@@ -84,7 +84,7 @@ class Slide(BaseModel):
     thumbnail_cos_key = Column(String(500), nullable=True)  # 缩略图 COS 键
     thumbnail_url = Column(String(1000), nullable=True)  # 缩略图 COS URL
     
-    # 向量ID（存储在 ChromaDB 中）
+    # 向量ID（存储在 ES 向量数据库中）
     vector_id = Column(String(100), nullable=True, index=True)
     is_vectorized = Column(Integer, default=0, nullable=False)  # 是否已向量化 (0=否, 1=是)
     
