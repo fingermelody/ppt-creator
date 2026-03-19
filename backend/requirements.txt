@@ -26,6 +26,9 @@ httpx==0.26.0
 # 腾讯云 COS SDK
 cos-python-sdk-v5==1.9.30
 
+# 腾讯云 ADP 智能文档解析 SDK
+tencentcloud-sdk-python-lkeap>=3.0.0
+
 # PPT 解析和生成
 python-pptx>=0.6.23
 lxml>=4.9.0

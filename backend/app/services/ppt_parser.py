@@ -1,6 +1,10 @@
 """
 PPT 解析服务
 解析 PPT 文件的每一页内容，提取文本用于向量化
+
+支持两种解析引擎：
+1. 腾讯云 ADP 智能文档解析（优先，需要 COS URL）
+2. python-pptx 本地解析（降级方案）
 """
 
 import os
@@ -22,17 +26,21 @@ class SlideContent:
         title: Optional[str] = None,
         content_text: str = "",
         layout_type: Optional[str] = None,
-        elements: Optional[List[Dict]] = None
+        elements: Optional[List[Dict]] = None,
+        thumbnail_url: Optional[str] = None,
+        markdown_text: Optional[str] = None,
     ):
         self.page_number = page_number
         self.title = title
         self.content_text = content_text
         self.layout_type = layout_type
         self.elements = elements or []
+        self.thumbnail_url = thumbnail_url
+        self.markdown_text = markdown_text
 
 
 class PPTParser:
-    """PPT 解析器"""
+    """PPT 解析器（python-pptx 本地解析）"""
     
     def __init__(self, file_path: str):
         """
@@ -233,18 +241,85 @@ class PPTParser:
         return slides_content
 
 
-def parse_ppt_file(file_path: str) -> List[SlideContent]:
+def parse_ppt_file(
+    file_path: str,
+    cos_url: Optional[str] = None,
+) -> List[SlideContent]:
     """
-    解析 PPT 文件
+    解析 PPT 文件（统一入口）
+    
+    优先使用腾讯云 ADP 智能文档解析，失败时降级到 python-pptx。
     
     Args:
-        file_path: PPT 文件路径
+        file_path: PPT 本地文件路径
+        cos_url: PPT 文件的 COS 访问 URL（ADP 解析需要）
         
     Returns:
         SlideContent 列表
     """
+    from app.core.config import settings
+    
+    # 尝试使用 ADP 解析
+    if settings.ADP_ENABLED and cos_url:
+        try:
+            logger.info(f"尝试使用 ADP 解析: {cos_url[:80]}...")
+            slides = _parse_with_adp(cos_url, file_path)
+            if slides:
+                logger.info(f"ADP 解析成功，共 {len(slides)} 页")
+                return slides
+        except Exception as e:
+            logger.warning(f"ADP 解析失败: {e}")
+            if not settings.ADP_FALLBACK_TO_PPTX:
+                raise
+            logger.info("降级到 python-pptx 解析")
+    
+    # 降级到 python-pptx
+    logger.info(f"使用 python-pptx 解析: {file_path}")
     parser = PPTParser(file_path)
     return parser.parse_all_slides()
+
+
+def _parse_with_adp(cos_url: str, file_path: str) -> List[SlideContent]:
+    """
+    使用 ADP 解析 PPT，将结果转换为 SlideContent 格式
+    
+    Args:
+        cos_url: COS 文件 URL
+        file_path: 本地文件路径（用于确定文件类型）
+        
+    Returns:
+        SlideContent 列表
+    """
+    from app.services.adp_parser import get_adp_parser
+    
+    adp = get_adp_parser()
+    if not adp.enabled:
+        raise RuntimeError("ADP 服务未启用")
+    
+    # 确定文件类型
+    ext = os.path.splitext(file_path)[1].lower()
+    file_type_map = {
+        ".pptx": "PPTX",
+        ".ppt": "PPT",
+    }
+    file_type = file_type_map.get(ext, "PPTX")
+    
+    # 调用 ADP 解析
+    adp_slides = adp.parse_ppt(cos_url=cos_url, file_type=file_type)
+    
+    # 转换为 SlideContent 格式
+    slides = []
+    for adp_slide in adp_slides:
+        slides.append(SlideContent(
+            page_number=adp_slide.page_number,
+            title=adp_slide.title,
+            content_text=adp_slide.content_text,
+            layout_type=adp_slide.layout_type or "adp_parsed",
+            elements=adp_slide.elements,
+            markdown_text=adp_slide.markdown_text,
+        ))
+    
+    return slides
 
 
 def get_ppt_page_count(file_path: str) -> int:

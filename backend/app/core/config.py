@@ -88,6 +88,16 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: List[str] = [".pptx", ".ppt"]
     CHUNK_SIZE: int = 5 * 1024 * 1024  # 5MB
     
+    # ============== 腾讯云通用配置 ==============
+    TENCENT_SECRET_ID: Optional[str] = None
+    TENCENT_SECRET_KEY: Optional[str] = None
+    TENCENT_REGION: str = "ap-guangzhou"
+    
+    # ============== ADP 文档解析配置 ==============
+    ADP_ENABLED: bool = True  # 是否启用 ADP 文档解析
+    ADP_REGION: str = "ap-guangzhou"  # ADP 服务区域
+    ADP_FALLBACK_TO_PPTX: bool = True  # ADP 失败时是否降级到 python-pptx
+    
     # ============== 腾讯云 COS 配置 ==============
     COS_SECRET_ID: Optional[str] = None
     COS_SECRET_KEY: Optional[str] = None

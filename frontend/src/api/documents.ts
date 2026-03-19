@@ -86,6 +86,11 @@ export const documentsApi = {
       params: { query, page, limit },
     });
   },
+
+  // 获取文档页面预览数据（缩略图 + 内容概要）
+  getDocumentSlidesPreview: async (documentId: string) => {
+    return apiClient.get<any>(`/api/documents/${documentId}/slides/preview`);
+  },
 };
 
 export default documentsApi;

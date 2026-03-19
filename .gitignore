@@ -84,3 +84,10 @@ backend/uploads/
 
 # 测试文件
 test_*.py
+
+# Prompt 和设计文档
+prompt.md
+详细设计方案.md
+需求文档.md
+.agent/
+image/prompt/

@@ -28,6 +28,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const getActiveMenu = () => {
     const path = location.pathname;
     if (path.startsWith('/generation')) return '/generation';
+    if (path.startsWith('/library')) return '/library';
     if (path.startsWith('/assembly')) return '/assembly';
     if (path.startsWith('/outline')) return '/outline';
     if (path.startsWith('/refinement')) return '/refinement';

@@ -76,7 +76,7 @@ def get_file_dir() -> Path:
 
 def process_document_background(document_id: str, file_path: str, original_filename: str):
     """
-    后台处理文档：上传到 COS、解析内容、向量化
+    后台处理文档：上传到 COS、ADP 解析内容、生成缩略图、向量化
     
     Args:
         document_id: 文档 ID
@@ -87,18 +87,16 @@ def process_document_background(document_id: str, file_path: str, original_filen
     from app.services.ppt_parser import parse_ppt_file
     from app.services.vectorization import get_vectorization_service
     
-    # 创建新的数据库会话
     db = SessionLocal()
     
     try:
-        # 获取文档记录
         document = db.query(Document).filter(Document.id == document_id).first()
         if not document:
-            logger.error(f"文档不存在: {document_id}")
+            logger.error(f"Document not found: {document_id}")
             return
         
-        # 1. 上传到 COS
-        logger.info(f"开始上传文档到 COS: {document_id}")
+        # 1. Upload to COS
+        logger.info(f"Uploading document to COS: {document_id}")
         document.status = DocumentStatus.PROCESSING
         db.commit()
         
@@ -109,39 +107,53 @@ def process_document_background(document_id: str, file_path: str, original_filen
         )
         
         if not cos_key or not cos_url:
-            raise Exception("上传到 COS 失败")
+            raise Exception("Failed to upload to COS")
         
         document.cos_object_key = cos_key
         document.cos_url = cos_url
         db.commit()
-        logger.info(f"文档上传到 COS 成功: {cos_url}")
+        logger.info(f"COS upload success: {cos_url}")
         
-        # 2. 解析 PPT
-        logger.info(f"开始解析 PPT: {document_id}")
+        # 2. Parse PPT (ADP first, fallback to python-pptx)
+        logger.info(f"Parsing PPT: {document_id}")
         document.status = DocumentStatus.PARSING
         db.commit()
         
-        slides_content = parse_ppt_file(file_path)
+        slides_content = parse_ppt_file(file_path, cos_url=cos_url)
         document.page_count = len(slides_content)
         db.commit()
-        logger.info(f"PPT 解析完成，共 {len(slides_content)} 页")
+        logger.info(f"PPT parsed: {len(slides_content)} pages")
         
-        # 3. 创建 Slide 记录并向量化
-        logger.info(f"开始创建 Slide 记录和向量化: {document_id}")
+        # 3. Generate thumbnail URLs via COS CI doc-preview
+        logger.info(f"Generating thumbnail URLs: {document_id}")
+        thumbnail_urls = []
+        if cos_key and cos_upload_service.enabled:
+            thumbnail_urls = cos_upload_service.generate_all_thumbnail_urls(
+                object_key=cos_key,
+                page_count=len(slides_content),
+                scale=50,
+                dst_type="png",
+            )
+        
+        # 4. Create Slide records and vectorize
+        logger.info(f"Creating Slide records and vectorizing: {document_id}")
         document.status = DocumentStatus.VECTORIZING
         db.commit()
         
         vectorization_service = get_vectorization_service()
         vectorized_count = 0
         
-        # 获取源 PPT 的 COS URL（用于向量化元数据）
         source_url = document.cos_url
         source_filename = document.original_filename
         
-        for slide_content in slides_content:
+        for idx, slide_content in enumerate(slides_content):
             slide_id = str(uuid.uuid4())
             
-            # 创建 Slide 记录
+            # Get thumbnail URL for this page
+            thumb_url = None
+            if idx < len(thumbnail_urls):
+                thumb_url = thumbnail_urls[idx]
+            
             slide = Slide(
                 id=slide_id,
                 document_id=document_id,
@@ -150,11 +162,13 @@ def process_document_background(document_id: str, file_path: str, original_filen
                 content_text=slide_content.content_text,
                 layout_type=slide_content.layout_type,
                 elements=slide_content.elements,
+                thumbnail_url=thumb_url,
+                thumbnail_cos_key=cos_key if thumb_url else None,
             )
             db.add(slide)
-            db.flush()  # 获取 slide ID
+            db.flush()
             
-            # 向量化（包含源 PPT 地址和页码，便于后续检索和组装）
+            # Vectorize
             if slide_content.content_text:
                 vector_id = vectorization_service.vectorize_slide(
                     slide_id=slide_id,
@@ -162,8 +176,8 @@ def process_document_background(document_id: str, file_path: str, original_filen
                     page_number=slide_content.page_number,
                     content_text=slide_content.content_text,
                     title=slide_content.title,
-                    source_url=source_url,  # 源 PPT 的 COS URL
-                    source_filename=source_filename  # 源 PPT 的文件名
+                    source_url=source_url,
+                    source_filename=source_filename
                 )
                 
                 if vector_id:
@@ -172,20 +186,20 @@ def process_document_background(document_id: str, file_path: str, original_filen
                     vectorized_count += 1
             
             db.commit()
-            logger.debug(f"处理完成: 第 {slide_content.page_number} 页")
+            logger.debug(f"Processed page {slide_content.page_number}")
         
-        # 4. 更新文档状态
+        # 5. Update document status
         document.vectorized_pages = vectorized_count
         document.status = DocumentStatus.READY
         db.commit()
         
-        logger.info(f"文档处理完成: {document_id}，共 {len(slides_content)} 页，{vectorized_count} 页已向量化")
-        
-        # 5. 清理本地临时文件（可选，保留用于备份）
-        # os.remove(file_path)
+        logger.info(
+            f"Document processing complete: {document_id}, "
+            f"{len(slides_content)} pages, {vectorized_count} vectorized"
+        )
         
     except Exception as e:
-        logger.error(f"处理文档失败: {document_id}, 错误: {e}")
+        logger.error(f"Document processing failed: {document_id}, error: {e}")
         try:
             document = db.query(Document).filter(Document.id == document_id).first()
             if document:
@@ -719,12 +733,96 @@ async def get_document_slides(
                 "id": slide.id,
                 "page_number": slide.page_number,
                 "title": slide.title,
-                "content": slide.content_text,  # 使用content_text属性
+                "content": slide.content_text,
                 "thumbnail_url": slide.thumbnail_url,
             }
             for slide in slides
         ],
         "total": len(slides)
+    }
+
+
+@router.get("/{document_id}/slides/preview", summary="获取文档页面预览数据")
+async def get_document_slides_preview(
+    document_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """
+    获取文档所有页面的预览数据（缩略图 + 内容概要）
+    
+    返回每页的缩略图 URL（COS CI doc-preview）和内容摘要，
+    用于文档详情页的页面总览展示。
+    
+    如果缩略图 URL 已过期，会实时重新生成。
+    """
+    from app.services.cos_upload import cos_upload_service
+    
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.owner_id == user_id,
+        Document.is_deleted == False
+    ).first()
+    
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文档不存在"
+        )
+    
+    if document.status != DocumentStatus.READY:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"文档尚未就绪，当前状态: {document.status.value}"
+        )
+    
+    slides = db.query(Slide).filter(Slide.document_id == document_id) \
+        .order_by(Slide.page_number).all()
+    
+    # Regenerate thumbnail URLs if COS key is available
+    fresh_thumbnails = {}
+    if document.cos_object_key and cos_upload_service.enabled:
+        urls = cos_upload_service.generate_all_thumbnail_urls(
+            object_key=document.cos_object_key,
+            page_count=len(slides),
+            scale=50,
+            dst_type="png",
+        )
+        for i, url in enumerate(urls):
+            fresh_thumbnails[i + 1] = url
+    
+    slides_preview = []
+    for slide in slides:
+        # Use fresh URL if available, otherwise use stored URL
+        thumb_url = fresh_thumbnails.get(slide.page_number) or slide.thumbnail_url
+        
+        # Generate content summary (first 150 chars)
+        summary = ""
+        if slide.content_text:
+            summary = slide.content_text[:150]
+            if len(slide.content_text) > 150:
+                summary += "..."
+        
+        slides_preview.append({
+            "id": slide.id,
+            "page_number": slide.page_number,
+            "title": slide.title,
+            "summary": summary,
+            "content_text": slide.content_text,
+            "thumbnail_url": thumb_url,
+            "layout_type": slide.layout_type,
+            "is_vectorized": slide.is_vectorized,
+        })
+    
+    return {
+        "document_id": document_id,
+        "title": document.title,
+        "original_filename": document.original_filename,
+        "page_count": document.page_count,
+        "status": document.status.value,
+        "cos_url": document.cos_url,
+        "slides": slides_preview,
+        "total": len(slides_preview),
     }
 
 

@@ -6,7 +6,7 @@
 import os
 import logging
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from qcloud_cos import CosConfig
 from qcloud_cos import CosS3Client
 import uuid
@@ -264,6 +264,80 @@ class COSUploadService:
                 return preview_url
         
         return None
+    
+    def generate_thumbnail_url(
+        self,
+        object_key: str,
+        page: int = 1,
+        scale: int = 50,
+        dst_type: str = "png",
+        expires: int = 7200,
+    ) -> Optional[str]:
+        """
+        生成 PPT 页面缩略图 URL（使用 COS 数据万象 doc-preview）
+        
+        通过 COS CI 的文档转图片功能，实时生成指定页面的缩略图。
+        URL 格式: {presigned_url}&ci-process=doc-preview&page={N}&dstType=png&scale=50
+        
+        Args:
+            object_key: COS 对象键
+            page: 页码（从 1 开始）
+            scale: 缩放百分比（10-200，默认 50）
+            dst_type: 输出格式（png 或 jpg，默认 png）
+            expires: URL 有效期（秒，默认 2 小时）
+        
+        Returns:
+            缩略图 URL 或 None
+        """
+        url = self.get_presigned_url(object_key, expires)
+        if not url:
+            return None
+        
+        separator = '&' if '?' in url else '?'
+        thumbnail_url = (
+            f"{url}{separator}"
+            f"ci-process=doc-preview&page={page}"
+            f"&dstType={dst_type}&scale={scale}"
+        )
+        return thumbnail_url
+    
+    def generate_all_thumbnail_urls(
+        self,
+        object_key: str,
+        page_count: int,
+        scale: int = 50,
+        dst_type: str = "png",
+        expires: int = 7200,
+    ) -> List[Optional[str]]:
+        """
+        批量生成所有页面的缩略图 URL
+        
+        Args:
+            object_key: COS 对象键
+            page_count: 总页数
+            scale: 缩放百分比
+            dst_type: 输出格式
+            expires: URL 有效期
+        
+        Returns:
+            缩略图 URL 列表（索引 0 对应第 1 页）
+        """
+        urls = []
+        # 获取一个基础预签名 URL，所有页面共用同一个签名
+        base_url = self.get_presigned_url(object_key, expires)
+        if not base_url:
+            return [None] * page_count
+        
+        separator = '&' if '?' in base_url else '?'
+        for page in range(1, page_count + 1):
+            thumbnail_url = (
+                f"{base_url}{separator}"
+                f"ci-process=doc-preview&page={page}"
+                f"&dstType={dst_type}&scale={scale}"
+            )
+            urls.append(thumbnail_url)
+        
+        return urls
     
     def get_download_url(
         self,

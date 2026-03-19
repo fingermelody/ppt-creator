@@ -351,7 +351,17 @@ export default function Library() {
         <div className="document-name-cell">
           <FilePowerpointIcon size="24px" style={{ color: '#D24726', marginRight: '12px', flexShrink: 0 }} />
           <Tooltip content={row.title}>
-            <span className="document-title">{row.title}</span>
+            <span
+              className="document-title"
+              style={{ cursor: row.status === 'ready' ? 'pointer' : 'default', color: row.status === 'ready' ? '#0052d9' : undefined }}
+              onClick={() => {
+                if (row.status === 'ready') {
+                  navigate(`/library/${row.id}`);
+                }
+              }}
+            >
+              {row.title}
+            </span>
           </Tooltip>
         </div>
       ),

@@ -7,6 +7,7 @@ import Refinement from './pages/Refinement';
 import RefinementList from './pages/Refinement/List';
 import Generation from './pages/Generation';
 import Drafts from './pages/Drafts';
+import DocumentDetail from './pages/DocumentDetail';
 
 function Router() {
   return (
@@ -15,6 +16,7 @@ function Router() {
         <Route path="/" element={<Navigate to="/generation" replace />} />
         <Route path="/generation" element={<Generation />} />
         <Route path="/library" element={<Library />} />
+        <Route path="/library/:documentId" element={<DocumentDetail />} />
         <Route path="/outline" element={<Outline />} />
         <Route path="/assembly/:draftId?" element={<Assembly />} />
         <Route path="/refinement" element={<RefinementList />} />
