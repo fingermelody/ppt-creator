@@ -1,0 +1,166 @@
+.refinement-list-page {
+  padding: 24px;
+  min-height: 100%;
+  background: #f5f7fa;
+}
+
+.refinement-list-page.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+}
+
+.page-description {
+  margin: 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.page-toolbar {
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tab-content {
+  padding: 24px 0;
+}
+
+/* 任务卡片样式 */
+.task-card,
+.draft-card {
+  height: 100%;
+  transition: all 0.3s ease;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.task-card:hover,
+.draft-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-body {
+  padding: 8px 0;
+}
+
+.task-info,
+.draft-info {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #666;
+}
+
+.info-item .t-icon {
+  font-size: 14px;
+  color: #999;
+}
+
+.task-time,
+.draft-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #999;
+}
+
+.task-time .t-icon,
+.draft-time .t-icon {
+  font-size: 12px;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.card-footer .t-button {
+  font-size: 12px;
+}
+
+/* 空状态样式 */
+.tab-content .t-empty {
+  padding: 60px 0;
+}
+
+.empty-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+  text-align: center;
+}
+
+.empty-text {
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: #999;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .refinement-list-page {
+    padding: 16px;
+  }
+
+  .page-toolbar {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .page-toolbar .t-input {
+    width: 100% !important;
+  }
+
+  .task-info,
+  .draft-info {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .card-footer {
+    flex-wrap: wrap;
+  }
+}

@@ -1,0 +1,87 @@
+.page-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.page-item {
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 8px;
+}
+
+.page-item:hover {
+  background: #f0f2f5;
+}
+
+.page-item.selected {
+  background: #e6f7ff;
+  border: 2px solid #1890ff;
+}
+
+.page-item .t-card {
+  border: none;
+  background: transparent;
+}
+
+.page-item-content {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.page-thumbnail {
+  width: 40px;
+  height: 40px;
+  background: #e6f7ff;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1890ff;
+  font-weight: 600;
+}
+
+.page-number {
+  font-size: 14px;
+}
+
+.page-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-source,
+.page-title {
+  margin: 0;
+  font-size: 12px;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+
+.page-subtitle {
+  margin: 0;
+  font-size: 11px;
+  color: #999;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+
+.page-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #999;
+}
+
+.page-version {
+  color: #999;
+}

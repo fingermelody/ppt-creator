@@ -1,0 +1,684 @@
+/* 大纲设计页面样式 */
+
+.outline-page {
+  padding: 24px;
+  min-height: 100%;
+  background-color: #f5f7fa;
+}
+
+.outline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.header-left h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2329;
+}
+
+.header-desc {
+  margin: 0;
+  font-size: 14px;
+  color: #8f959e;
+}
+
+.outline-main {
+  display: flex;
+  gap: 24px;
+}
+
+.outline-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.outline-sidebar {
+  width: 320px;
+  flex-shrink: 0;
+}
+
+.generate-card {
+  margin-bottom: 24px;
+}
+
+.generate-card :global(.t-tabs__nav-item) {
+  font-size: 15px;
+}
+
+.preview-card {
+  margin-bottom: 24px;
+}
+
+/* 草稿列表 */
+.drafts-card {
+  position: sticky;
+  top: 24px;
+}
+
+.drafts-list {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.draft-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.draft-item:hover {
+  background-color: #f2f3f5;
+}
+
+.draft-item.active {
+  background-color: #e8f4ff;
+  border: 1px solid #1677ff;
+}
+
+.draft-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.draft-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2329;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.draft-meta {
+  font-size: 12px;
+  color: #8f959e;
+  margin-top: 4px;
+}
+
+.draft-meta span {
+  margin-right: 4px;
+}
+
+.draft-tags {
+  flex-shrink: 0;
+}
+
+/* 智能生成区域 */
+.smart-generate {
+  padding: 16px 0;
+}
+
+.smart-input-area {
+  margin-bottom: 16px;
+}
+
+.smart-input-area :global(.t-textarea__inner) {
+  min-height: 200px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.smart-placeholder {
+  color: #8f959e;
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-line;
+}
+
+.smart-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.char-count {
+  font-size: 12px;
+  color: #8f959e;
+}
+
+.char-count.warning {
+  color: #ff7d00;
+}
+
+.char-count.error {
+  color: #f53f3f;
+}
+
+/* 向导式生成 */
+.wizard-generate {
+  padding: 16px 0;
+}
+
+.wizard-steps {
+  margin-bottom: 24px;
+}
+
+.wizard-content {
+  min-height: 300px;
+}
+
+.wizard-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e6eb;
+}
+
+/* 步骤1：主题设定 */
+.step-theme {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-item label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2329;
+}
+
+.form-item label .required {
+  color: #f53f3f;
+  margin-left: 4px;
+}
+
+.form-item .hint {
+  font-size: 12px;
+  color: #8f959e;
+}
+
+.audience-options,
+.duration-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 步骤2：章节规划 */
+.step-chapters {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.template-shortcuts {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.chapters-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chapter-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background-color: #f5f7fa;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.chapter-item:hover {
+  background-color: #e5e6eb;
+}
+
+.chapter-item.dragging {
+  background-color: #e8f4ff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.chapter-drag-handle {
+  cursor: grab;
+  color: #8f959e;
+}
+
+.chapter-order {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #1677ff;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chapter-inputs {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+}
+
+.chapter-inputs :global(.t-input) {
+  flex: 1;
+}
+
+.chapter-page-count {
+  width: 120px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chapter-page-count span {
+  font-size: 12px;
+  color: #8f959e;
+  white-space: nowrap;
+}
+
+.chapter-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.add-chapter-btn {
+  width: 100%;
+  border-style: dashed;
+}
+
+.chapters-summary {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid #e5e6eb;
+  font-size: 14px;
+  color: #1f2329;
+}
+
+.chapters-summary strong {
+  color: #1677ff;
+  margin: 0 4px;
+}
+
+/* 步骤3：内容摘要 */
+.step-summaries {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.summary-item {
+  padding: 16px;
+  background-color: #f5f7fa;
+  border-radius: 8px;
+}
+
+.summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.summary-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: #1f2329;
+}
+
+.summary-page-count {
+  font-size: 12px;
+  color: #8f959e;
+}
+
+.summary-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.keywords-input {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.ai-suggestion {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  background-color: #fff;
+  border-radius: 6px;
+  border: 1px solid #e5e6eb;
+}
+
+.ai-icon {
+  color: #1677ff;
+  font-size: 16px;
+}
+
+.ai-text {
+  flex: 1;
+  font-size: 13px;
+  color: #8f959e;
+  line-height: 1.6;
+}
+
+/* 步骤4：风格选择 */
+.step-style {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.style-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.style-item {
+  padding: 16px;
+  border: 2px solid #e5e6eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.style-item:hover {
+  border-color: #1677ff;
+}
+
+.style-item.selected {
+  border-color: #1677ff;
+  background-color: #e8f4ff;
+}
+
+.style-preview {
+  width: 100%;
+  aspect-ratio: 16/9;
+  background-color: #f5f7fa;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+}
+
+.style-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2329;
+}
+
+.skip-style {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  background-color: #f5f7fa;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.skip-style:hover {
+  background-color: #e5e6eb;
+}
+
+/* 大纲预览 */
+.outline-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.preview-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5e6eb;
+}
+
+.preview-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2329;
+}
+
+.preview-objective {
+  font-size: 14px;
+  color: #8f959e;
+}
+
+.preview-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #8f959e;
+}
+
+.preview-chapters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preview-chapter {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background-color: #f5f7fa;
+  border-radius: 8px;
+}
+
+.preview-chapter-order {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #1677ff;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.preview-chapter-content {
+  flex: 1;
+}
+
+.preview-chapter-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2329;
+  margin-bottom: 4px;
+}
+
+.preview-chapter-summary {
+  font-size: 13px;
+  color: #8f959e;
+  line-height: 1.5;
+}
+
+.preview-chapter-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.preview-total {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid #e5e6eb;
+  font-size: 14px;
+  color: #1f2329;
+}
+
+.preview-total strong {
+  color: #1677ff;
+  margin: 0 4px;
+}
+
+/* 编辑模式样式 */
+.edit-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.edit-row :global(.t-input),
+.edit-row :global(.t-textarea) {
+  flex: 1;
+}
+
+.edit-icon {
+  margin-left: 8px;
+  font-size: 14px;
+  color: #8f959e;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.preview-title:hover .edit-icon,
+.preview-objective:hover .edit-icon,
+.preview-chapter-title:hover .edit-icon {
+  opacity: 1;
+}
+
+.preview-title,
+.preview-objective,
+.preview-chapter-title {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.chapter-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chapter-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.preview-chapter-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.preview-chapter:hover .preview-chapter-actions {
+  opacity: 1;
+}
+
+/* 模板选择器 */
+.template-dialog {
+  width: 800px;
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.template-item {
+  padding: 20px;
+  border: 2px solid #e5e6eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.template-item:hover {
+  border-color: #1677ff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.template-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+
+.template-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2329;
+  margin-bottom: 8px;
+}
+
+.template-desc {
+  font-size: 13px;
+  color: #8f959e;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.template-chapters-count {
+  font-size: 12px;
+  color: #1677ff;
+}
+
+/* 响应式调整 */
+@media (max-width: 1200px) {
+  .outline-main {
+    flex-direction: column;
+  }
+
+  .outline-sidebar {
+    width: 100%;
+  }
+
+  .drafts-card {
+    position: static;
+  }
+
+  .drafts-list {
+    max-height: 300px;
+  }
+}
+
+@media (max-width: 768px) {
+  .outline-page {
+    padding: 16px;
+  }
+
+  .outline-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .chapter-inputs {
+    flex-direction: column;
+  }
+
+  .chapter-page-count {
+    width: 100%;
+  }
+}

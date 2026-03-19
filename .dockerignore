@@ -1,0 +1,62 @@
+# Git
+.git
+.gitignore
+
+# CI/CD
+.github
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules
+frontend/node_modules
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.coverage
+htmlcov/
+*.egg-info/
+
+# IDE
+.vscode
+.idea
+
+# Docs (not needed in image)
+*.md
+!README.md
+docs/
+image/
+
+# Deployment configs (not needed in image)
+deployment/scripts/
+deployment/kubernetes/
+deployment/logs/
+COMPLETION_SUMMARY.md
+DEPLOYMENT_SCRIPTS_GUIDE.md
+OPTIMIZATION_PLAN.md
+SECURITY.md
+
+# Tests (not needed in prod image)
+tests/
+scripts/
+
+# Agent/tool configs
+.agent/
+.codebuddy/
+.rules/
+rules/
+.mcp.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
