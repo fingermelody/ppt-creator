@@ -91,3 +91,8 @@ prompt.md
 需求文档.md
 .agent/
 image/prompt/
+
+# CodeBuddy 和规则文件
+.codebuddy/
+.rules/
+rules/
